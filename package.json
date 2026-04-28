@@ -1,0 +1,17 @@
+{
+  "name": "po-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Product Owner Assistant for syncing Trello cards into Jira issues and managing workflow alerts.",
+  "scripts": {
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server start",
+    "test": "npm --prefix server test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
