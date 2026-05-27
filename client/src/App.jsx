@@ -5,6 +5,7 @@ import { formatMessage, translations } from './i18n.js';
 import { GmailPanel } from './GmailPanel.jsx';
 import { Login } from './Login.jsx';
 import { UserManagementPanel } from './UserManagementPanel.jsx';
+import { ProfilePanel } from './ProfilePanel.jsx';
 
 const emptySettings = {
   trelloApiKey: '',
@@ -411,13 +412,16 @@ export function App() {
           <button className={activePage === 'mail' ? 'active' : ''} onClick={() => setActivePage('mail')}>
             <Mail size={18} /> {language === 'es' ? 'Correos' : 'Mail'}
           </button>
+          <button className={activePage === 'profile' ? 'active' : ''} onClick={() => setActivePage('profile')}>
+            <User size={18} /> {language === 'es' ? 'Mi Perfil' : 'My Profile'}
+          </button>
           {user?.role === 'admin' && (
             <>
               <button className={activePage === 'settings' ? 'active' : ''} onClick={() => setActivePage('settings')}>
                 <KeyRound size={18} /> {t.nav.settings}
               </button>
               <button className={activePage === 'users' ? 'active' : ''} onClick={() => setActivePage('users')}>
-                <User size={18} /> {language === 'es' ? 'Usuarios' : 'Users'}
+                <Shield size={18} /> {language === 'es' ? 'Usuarios' : 'Users'}
               </button>
             </>
           )}
@@ -466,6 +470,10 @@ export function App() {
         </header>
 
         {error && <div className="errorBanner">{error}</div>}
+
+        {activePage === 'profile' && (
+          <ProfilePanel user={user} language={language} />
+        )}
 
         {activePage === 'settings' && user?.role === 'admin' && (
           <section className="panel">

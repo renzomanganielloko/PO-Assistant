@@ -6,7 +6,7 @@ export function UserManagementPanel({ language, t }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ fullName: '', email: '', password: '' });
+  const [form, setForm] = useState({ fullName: '', email: '', password: '', role: 'user' });
 
   useEffect(() => {
     loadUsers();
@@ -30,7 +30,7 @@ export function UserManagementPanel({ language, t }) {
     setLoading(true);
     try {
       await api.registerUser(form);
-      setForm({ fullName: '', email: '', password: '' });
+      setForm({ fullName: '', email: '', password: '', role: 'user' });
       await loadUsers();
     } catch (err) {
       setError(err.message);
@@ -123,7 +123,7 @@ export function UserManagementPanel({ language, t }) {
               <strong>{u.fullName}</strong>
             </div>
             <span>{u.email}</span>
-            <span className={`roleBadge ${u.role}`}>{u.role}</span>
+            <span className={`roleBadge ${u.role}`}>{u.role === 'user' ? 'PO' : 'Admin'}</span>
             <div className="userActions">
               {u.role !== 'admin' && (
                 <button onClick={() => handleDeleteUser(u._id)} className="deleteBtn" title="Eliminar">

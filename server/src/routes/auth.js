@@ -10,15 +10,33 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    console.log(`Login attempt for email: "${email}"`);
+    
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email y contraseña son requeridos.' });
+    }
 
-    if (!user || !(await user.comparePassword(password))) {
+    const cleanEmail = email.trim().toLowerCase();
+    console.log(`Cleaned email: "${cleanEmail}"`);
+    
+    const user = await User.findOne({ email: cleanEmail });
+
+    if (!user) {
+      console.log('User not found in DB');
+      return res.status(401).json({ message: 'Credenciales inválidas. Verifica tu correo y contraseña.' });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    console.log(`Password match result: ${isMatch}`);
+
+    if (!isMatch) {
       return res.status(401).json({ message: 'Credenciales inválidas. Verifica tu correo y contraseña.' });
     }
 
     const token = jwt.sign({ _id: user._id }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ user: { id: user._id, email: user.email, fullName: user.fullName, role: user.role }, token });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
@@ -64,6 +82,24 @@ router.delete('/users/:id', auth, admin, async (req, res) => {
 // Get current user profile
 router.get('/me', auth, async (req, res) => {
   res.json({ user: { id: req.user._id, email: req.user.email, fullName: req.user.fullName, role: req.user.role } });
+});
+
+// Change password
+router.put('/password', auth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!(await req.user.comparePassword(currentPassword))) {
+      return res.status(401).json({ message: 'La contraseña actual es incorrecta.' });
+    }
+
+    req.user.password = newPassword; // Pre-save hook will hash it
+    await req.user.save();
+
+    res.json({ message: 'Contraseña actualizada exitosamente.' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error al cambiar la contraseña.' });
+  }
 });
 
 export { router as authRouter };

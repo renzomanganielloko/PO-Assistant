@@ -47,6 +47,10 @@ export const api = {
     body: JSON.stringify(userData)
   }),
   deleteUser: (id) => request(`/auth/users/${id}`, { method: 'DELETE' }),
+  changePassword: (currentPassword, newPassword) => request('/auth/password', {
+    method: 'PUT',
+    body: JSON.stringify({ currentPassword, newPassword })
+  }),
   credentialStatus: () => request('/settings/status'),
   dashboardStats: () => request('/dashboard/stats'),
   saveSettings: (payload) =>
