@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { AlertCircle, Bot, CheckCircle2, ClipboardList, KeyRound, ListChecks, Play, RefreshCw, Save, Star, Moon, Sun, Bell, MessageSquare, ArrowRightLeft, PlusCircle, ExternalLink, Send, Search, User, X, Activity, List, ListOrdered, Bold, Image as ImageIcon, Mail, Minus, LogOut } from 'lucide-react';
+import { AlertCircle, Bot, CheckCircle2, ClipboardList, KeyRound, ListChecks, Play, RefreshCw, Save, Star, Moon, Sun, Bell, MessageSquare, ArrowRightLeft, PlusCircle, ExternalLink, Send, Search, User, X, Activity, List, ListOrdered, Bold, Image as ImageIcon, Mail, Minus, LogOut, Shield } from 'lucide-react';
 import { api } from './api.js';
 import { formatMessage, translations } from './i18n.js';
 import { GmailPanel } from './GmailPanel.jsx';
