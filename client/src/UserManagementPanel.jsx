@@ -117,17 +117,17 @@ export function UserManagementPanel({ language, t }) {
             <select 
               value={form.role} 
               onChange={e => setForm({...form, role: e.target.value})}
+              className="roleSelect"
               style={{
                 width: '100%',
-                padding: '12px 12px 12px 16px',
+                padding: '12px',
                 border: '1.5px solid var(--ko-border)',
                 borderRadius: '12px',
                 fontSize: '14px',
                 background: 'var(--ko-input-bg)',
                 color: 'var(--ko-text)',
                 height: '48px',
-                marginTop: '4px',
-                outline: 'none'
+                marginTop: '4px'
               }}
             >
               <option value="user">PO</option>
@@ -144,35 +144,37 @@ export function UserManagementPanel({ language, t }) {
       {error && <div className="errorBanner" style={{ marginTop: '20px' }}>{error}</div>}
 
       <div className="userList" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <header style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(200px, 2fr) 80px 100px', gap: '10px', padding: '12px 24px', fontSize: '12px', fontWeight: 800, color: 'var(--ko-text-muted)', textTransform: 'uppercase' }}>
+        <header style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px 100px', gap: '10px', padding: '12px 24px', fontSize: '12px', fontWeight: 800, color: 'var(--ko-text-muted)', textTransform: 'uppercase' }}>
           <span>{language === 'es' ? 'Usuario' : 'User'}</span>
           <span>Email</span>
           <span>{language === 'es' ? 'Rol' : 'Role'}</span>
           <span style={{ textAlign: 'right' }}>{language === 'es' ? 'Acciones' : 'Actions'}</span>
         </header>
         {users.map(u => (
-          <div key={u._id} className="userRow" style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(200px, 2fr) 80px 100px', gap: '10px', alignItems: 'center', padding: '16px 24px', background: 'var(--ko-bg-card)', border: '1px solid var(--ko-border)', borderRadius: '16px', opacity: u.isActive !== false ? 1 : 0.6 }}>
-            <div className="userInfo">
+          <div key={u._id} className="userRow" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px 100px', gap: '10px', alignItems: 'center', padding: '16px 24px', background: 'var(--ko-bg-card)', border: '1px solid var(--ko-border)', borderRadius: '16px', opacity: u.isActive !== false ? 1 : 0.6 }}>
+            <div className="userInfo" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               <div className="userAvatar" style={{ background: u.isActive !== false ? 'var(--ko-orange)' : '#94a3b8' }}>
                 {u.fullName.charAt(0).toUpperCase()}
               </div>
-              <div>
+              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 <strong>{u.fullName}</strong>
                 {u.isActive === false && <span style={{display: 'block', fontSize: '11px', color: '#ef4444', fontWeight: 700}}>PAUSADO</span>}
               </div>
             </div>
-            <span>{u.email}</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</span>
             <span className={`roleBadge ${u.role}`}>{u.role === 'user' ? 'PO' : 'Admin'}</span>
-            <div className="userActions" style={{ gap: '8px' }}>
-              {u.role !== 'admin' && (
+            <div className="userActions" style={{ gap: '8px', display: 'flex', justifyContent: 'flex-end' }}>
+              {u.role !== 'admin' ? (
                 <>
-                  <button onClick={() => handleToggleStatus(u._id)} className="pauseBtn" title={u.isActive !== false ? 'Pausar' : 'Activar'}>
+                  <button onClick={() => handleToggleStatus(u._id)} className="pauseBtn" title={u.isActive !== false ? 'Pausar' : 'Activar'} style={{ background: 'var(--ko-secondary-btn)' }}>
                     {u.isActive !== false ? <Pause size={16} /> : <Play size={16} />}
                   </button>
-                  <button onClick={() => handleDeleteUser(u._id)} className="deleteBtn" title="Eliminar">
+                  <button onClick={() => handleDeleteUser(u._id)} className="deleteBtn" title="Eliminar" style={{ background: '#fee2e2' }}>
                     <Trash2 size={16} />
                   </button>
                 </>
+              ) : (
+                <span style={{ fontSize: '11px', color: 'var(--ko-text-muted)' }}>Admin</span>
               )}
             </div>
           </div>
