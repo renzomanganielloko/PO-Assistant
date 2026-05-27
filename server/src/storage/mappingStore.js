@@ -1,30 +1,42 @@
-import { readJson, writeJson } from './fileStore.js';
+import mongoose from 'mongoose';
 
-const FILE_NAME = 'mappings.json';
+const mappingSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  trelloBoardId: { type: String, required: true },
+  trelloCardId: { type: String, required: true },
+  trelloCardUrl: { type: String },
+  trelloListName: { type: String },
+  jiraProjectKey: { type: String },
+  jiraIssueId: { type: String },
+  jiraIssueKey: { type: String },
+  jiraIssueUrl: { type: String },
+  jiraIssueApiUrl: { type: String }
+}, { timestamps: true });
 
-export async function listMappings() {
-  return readJson(FILE_NAME, []);
+// Ensure unique mapping per user per card
+mappingSchema.index({ userId: 1, trelloCardId: 1 }, { unique: true });
+
+export const Mapping = mongoose.model('Mapping', mappingSchema);
+
+export async function listMappings(userId) {
+  return await Mapping.find(userId ? { userId } : {});
 }
 
-export async function findMappingByTrelloCardId(trelloCardId) {
-  const mappings = await listMappings();
-  return mappings.find((mapping) => mapping.trelloCardId === trelloCardId) || null;
+export async function findMappingByTrelloCardId(userId, trelloCardId) {
+  return await Mapping.findOne({ userId, trelloCardId });
 }
 
-export async function saveMapping(mapping) {
-  const mappings = await listMappings();
-  const existingIndex = mappings.findIndex((item) => item.trelloCardId === mapping.trelloCardId);
-  const nextMapping = {
-    ...mapping,
-    updatedAt: new Date().toISOString()
-  };
-
-  if (existingIndex >= 0) {
-    mappings[existingIndex] = { ...mappings[existingIndex], ...nextMapping };
+export async function saveMapping(userId, mappingData) {
+  let mapping = await Mapping.findOne({ userId, trelloCardId: mappingData.trelloCardId });
+  if (!mapping) {
+    mapping = new Mapping({ userId, ...mappingData });
   } else {
-    mappings.push({ ...nextMapping, createdAt: new Date().toISOString() });
+    Object.assign(mapping, mappingData);
   }
-
-  await writeJson(FILE_NAME, mappings);
-  return nextMapping;
+  await mapping.save();
+  return mapping;
 }

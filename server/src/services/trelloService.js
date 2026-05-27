@@ -8,8 +8,8 @@ const trello = axios.create({
   timeout: 15000
 });
 
-async function trelloParams() {
-  const credentials = await loadCredentials();
+async function trelloParams(userId) {
+  const credentials = await loadCredentials(userId);
 
   if (!credentials.trelloApiKey || !credentials.trelloToken) {
     throw new AppError('Trello credentials are not configured.', 400);
@@ -21,8 +21,8 @@ async function trelloParams() {
   };
 }
 
-export async function fetchBoards() {
-  const params = await trelloParams();
+export async function fetchBoards(userId) {
+  const params = await trelloParams(userId);
   const { data } = await trello.get('/members/me/boards', {
     params: {
       ...params,
@@ -40,8 +40,8 @@ export async function fetchBoards() {
   }));
 }
 
-export async function validateTrelloCredentials() {
-  const params = await trelloParams();
+export async function validateTrelloCredentials(userId) {
+  const params = await trelloParams(userId);
   const { data } = await trello.get('/members/me', {
     params: {
       ...params,
@@ -56,8 +56,8 @@ export async function validateTrelloCredentials() {
   };
 }
 
-export async function fetchLists(boardId) {
-  const params = await trelloParams();
+export async function fetchLists(userId, boardId) {
+  const params = await trelloParams(userId);
   const { data } = await trello.get(`/boards/${boardId}/lists`, {
     params: {
       ...params,
@@ -73,8 +73,8 @@ export async function fetchLists(boardId) {
   }));
 }
 
-export async function fetchBoardMembers(boardId) {
-  const params = await trelloParams();
+export async function fetchBoardMembers(userId, boardId) {
+  const params = await trelloParams(userId);
   const { data } = await trello.get(`/boards/${boardId}/members`, {
     params: {
       ...params,
@@ -90,8 +90,8 @@ export async function fetchBoardMembers(boardId) {
   }));
 }
 
-export async function fetchCards(boardId, listId) {
-  const params = await trelloParams();
+export async function fetchCards(userId, boardId, listId) {
+  const params = await trelloParams(userId);
   const { data } = await trello.get(`/boards/${boardId}/cards`, {
     params: {
       ...params,
@@ -133,8 +133,8 @@ export async function fetchCards(boardId, listId) {
     }));
 }
 
-export async function attachUrlToCard(cardId, { name, url }) {
-  const params = await trelloParams();
+export async function attachUrlToCard(userId, cardId, { name, url }) {
+  const params = await trelloParams(userId);
   const { data } = await trello.post(`/cards/${cardId}/attachments`, null, {
     params: {
       ...params,
@@ -150,8 +150,8 @@ export async function attachUrlToCard(cardId, { name, url }) {
   };
 }
 
-export async function fetchActions(boardId) {
-  const params = await trelloParams();
+export async function fetchActions(userId, boardId) {
+  const params = await trelloParams(userId);
   const { data } = await trello.get(`/boards/${boardId}/actions`, {
     params: {
       ...params,
@@ -166,8 +166,8 @@ export async function fetchActions(boardId) {
   return data;
 }
 
-export async function uploadFileToCard(cardId, { filename, buffer }) {
-  const params = await trelloParams();
+export async function uploadFileToCard(userId, cardId, { filename, buffer }) {
+  const params = await trelloParams(userId);
   const form = new FormData();
   form.append('key', params.key);
   form.append('token', params.token);
@@ -182,8 +182,8 @@ export async function uploadFileToCard(cardId, { filename, buffer }) {
   return data;
 }
 
-export async function addComment(cardId, text) {
-  const params = await trelloParams();
+export async function addComment(userId, cardId, text) {
+  const params = await trelloParams(userId);
   const { data } = await trello.post(`/cards/${cardId}/actions/comments`, null, {
     params: {
       ...params,
@@ -194,12 +194,11 @@ export async function addComment(cardId, text) {
   return data;
 }
 
-export async function downloadAttachment(url) {
-  const params = await trelloParams();
+export async function downloadAttachment(userId, url) {
+  const params = await trelloParams(userId);
   
   let downloadUrl;
   try {
-    // Normalize trello.com to api.trello.com for API-based downloads
     const normalizedUrl = url.replace('https://trello.com/1/', 'https://api.trello.com/1/');
     downloadUrl = new URL(normalizedUrl);
     

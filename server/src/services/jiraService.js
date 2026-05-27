@@ -4,8 +4,8 @@ import { loadCredentials } from '../storage/credentialsStore.js';
 import { getReadAlerts } from '../storage/readAlertsStore.js';
 import { AppError } from '../utils/AppError.js';
 
-async function jiraClient() {
-  const credentials = await loadCredentials();
+async function jiraClient(userId) {
+  const credentials = await loadCredentials(userId);
   if (!credentials.jiraBaseUrl || !credentials.jiraEmail || !credentials.jiraApiToken) {
     throw new AppError('Jira credentials are not configured.', 400);
   }
@@ -22,14 +22,14 @@ async function jiraClient() {
   });
 }
 
-export async function fetchJiraProjects() {
-  const client = await jiraClient();
+export async function fetchJiraProjects(userId) {
+  const client = await jiraClient(userId);
   const { data } = await client.get('/rest/api/3/project/search', { params: { maxResults: 50 } });
   return (data.values || []).map(p => ({ id: p.id, key: p.key, name: p.name, projectTypeKey: p.projectTypeKey }));
 }
 
-export async function getAssignedIssuesCount() {
-  const client = await jiraClient();
+export async function getAssignedIssuesCount(userId) {
+  const client = await jiraClient(userId);
   try {
     const { data } = await client.post('/rest/api/3/search/jql', {
       jql: 'assignee = currentUser() AND statusCategory != Done',
@@ -43,9 +43,9 @@ export async function getAssignedIssuesCount() {
   }
 }
 
-export async function getJiraAlerts() {
-  const client = await jiraClient();
-  const readAlerts = await getReadAlerts();
+export async function getJiraAlerts(userId) {
+  const client = await jiraClient(userId);
+  const readAlerts = await getReadAlerts(userId);
 
   let myAccountId = '';
   let myDisplayName = '';
@@ -153,8 +153,8 @@ function extractTextFromAdf(adf) {
   return text.trim();
 }
 
-export async function findExistingJiraIssue({ projectKey, summary, trelloCardId }) {
-  const client = await jiraClient();
+export async function findExistingJiraIssue(userId, { projectKey, summary, trelloCardId }) {
+  const client = await jiraClient(userId);
   const queries = [
     { jql: `project = "${projectKey}" AND labels = "trello-id-${trelloCardId}"`, maxResults: 1 },
     { jql: `project = "${projectKey}" AND summary ~ "\\"${summary.replace(/"/g, '\\"')}\\""`, maxResults: 1 }
@@ -168,8 +168,8 @@ export async function findExistingJiraIssue({ projectKey, summary, trelloCardId 
   return null;
 }
 
-export async function createJiraIssue({ projectKey, issueType, cardPayload, trelloCardId }) {
-  const client = await jiraClient();
+export async function createJiraIssue(userId, { projectKey, issueType, cardPayload, trelloCardId }) {
+  const client = await jiraClient(userId);
   const { data } = await client.post('/rest/api/3/issue', {
     fields: {
       project: { key: projectKey }, summary: cardPayload.summary,
@@ -181,10 +181,9 @@ export async function createJiraIssue({ projectKey, issueType, cardPayload, trel
   return { id: data.id, key: data.key, self: data.self, browseUrl: `${client.defaults.baseURL}/browse/${data.key}` };
 }
 
-export async function createJiraRemoteLink(issueKey, { title, url }) {
-  const client = await jiraClient();
+export async function createJiraRemoteLink(userId, issueKey, { title, url }) {
+  const client = await jiraClient(userId);
   
-  // 1. Check if the link already exists to avoid duplicates
   try {
     const { data: existingLinks } = await client.get(`/rest/api/3/issue/${issueKey}/remotelink`);
     if (existingLinks.some(link => link.object.url === url)) {
@@ -195,23 +194,22 @@ export async function createJiraRemoteLink(issueKey, { title, url }) {
     console.warn(`[Jira] Could not verify existing remote links for ${issueKey}`, e.message);
   }
 
-  // 2. Create if not found
   const { data } = await withIssueVisibilityRetry(() =>
     client.post(`/rest/api/3/issue/${issueKey}/remotelink`, { object: { url, title } })
   );
   return { id: data.id };
 }
 
-export async function uploadAttachmentToJira(issueKey, { filename, buffer }) {
-  const client = await jiraClient();
+export async function uploadAttachmentToJira(userId, issueKey, { filename, buffer }) {
+  const client = await jiraClient(userId);
   const form = new FormData();
   form.append('file', buffer, filename);
   const { data } = await client.post(`/rest/api/3/issue/${issueKey}/attachments`, form, { headers: { ...form.getHeaders() } });
   return data;
 }
 
-export async function updateIssueDescription(issueKey, descriptionAdf) {
-  const client = await jiraClient();
+export async function updateIssueDescription(userId, issueKey, descriptionAdf) {
+  const client = await jiraClient(userId);
   await withIssueVisibilityRetry(() =>
     client.put(`/rest/api/3/issue/${issueKey}`, { fields: { description: descriptionAdf } })
   );

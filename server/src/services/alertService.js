@@ -1,16 +1,16 @@
 import { fetchActions, addComment as trelloAddComment, uploadFileToCard } from './trelloService.js';
 import { listAutomations } from '../storage/automationStore.js';
 
-export async function addComment(cardId, text, attachment) {
+export async function addComment(userId, cardId, text, attachment) {
   if (attachment) {
     const buffer = Buffer.from(attachment.split(',')[1], 'base64');
-    await uploadFileToCard(cardId, { filename: 'reply-image.png', buffer });
+    await uploadFileToCard(userId, cardId, { filename: 'reply-image.png', buffer });
   }
-  return trelloAddComment(cardId, text);
+  return trelloAddComment(userId, cardId, text);
 }
 
-export async function getLiveAlerts() {
-  const automations = await listAutomations();
+export async function getLiveAlerts(userId) {
+  const automations = await listAutomations(userId);
   // Filter boards that are marked as favorite
   const boardIds = automations
     .filter(a => a.favorite)
@@ -21,7 +21,7 @@ export async function getLiveAlerts() {
   const allActions = await Promise.all(
     boardIds.map(async (boardId) => {
       try {
-        const actions = await fetchActions(boardId);
+        const actions = await fetchActions(userId, boardId);
         return actions.map(action => ({ ...action, boardId }));
       } catch (e) {
         console.error(`Failed to fetch actions for board ${boardId}:`, e.message);

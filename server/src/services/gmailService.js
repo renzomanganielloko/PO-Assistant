@@ -21,15 +21,15 @@ export function getAuthUrl() {
   });
 }
 
-export async function setTokens(code) {
+export async function setTokens(userId, code) {
   const oauth2Client = getOAuth2Client();
   const { tokens } = await oauth2Client.getToken(code);
-  await saveCredentials({ googleTokens: tokens });
+  await saveCredentials(userId, { googleTokens: tokens });
   return tokens;
 }
 
-async function getAuthenticatedClient() {
-  const credentials = await loadCredentials();
+async function getAuthenticatedClient(userId) {
+  const credentials = await loadCredentials(userId);
   const oauth2Client = getOAuth2Client();
 
   if (!credentials.googleTokens) {
@@ -40,8 +40,8 @@ async function getAuthenticatedClient() {
 
   oauth2Client.on('tokens', async (tokens) => {
     if (tokens.refresh_token) {
-      const current = await loadCredentials();
-      await saveCredentials({
+      const current = await loadCredentials(userId);
+      await saveCredentials(userId, {
         googleTokens: { ...current.googleTokens, ...tokens }
       });
     }
@@ -50,8 +50,8 @@ async function getAuthenticatedClient() {
   return oauth2Client;
 }
 
-export async function fetchLabels() {
-  const auth = await getAuthenticatedClient();
+export async function fetchLabels(userId) {
+  const auth = await getAuthenticatedClient(userId);
   const gmail = google.gmail({ version: 'v1', auth });
   const res = await gmail.users.labels.list({ userId: 'me' });
 
@@ -70,8 +70,8 @@ export async function fetchLabels() {
   }));
 }
 
-export async function fetchEmails(limit = 15, labelId = 'INBOX') {
-  const auth = await getAuthenticatedClient();
+export async function fetchEmails(userId, labelId = 'INBOX', limit = 15) {
+  const auth = await getAuthenticatedClient(userId);
   const gmail = google.gmail({ version: 'v1', auth });
 
   const res = await gmail.users.messages.list({
@@ -125,8 +125,8 @@ export async function fetchEmails(limit = 15, labelId = 'INBOX') {
   return emails.filter(Boolean);
 }
 
-export async function getUnreadEmailCount(labelId = 'INBOX') {
-  const auth = await getAuthenticatedClient();
+export async function getUnreadEmailCount(userId, labelId = 'INBOX') {
+  const auth = await getAuthenticatedClient(userId);
   const gmail = google.gmail({ version: 'v1', auth });
   const res = await gmail.users.labels.get({ userId: 'me', id: labelId });
   return res.data.messagesUnread || 0;

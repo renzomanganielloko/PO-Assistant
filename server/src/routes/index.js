@@ -71,23 +71,23 @@ apiRouter.post(
 
 apiRouter.get(
   '/gmail/status',
-  asyncHandler(async (_req, res) => {
-    const credentials = await loadCredentials();
+  asyncHandler(async (req, res) => {
+    const credentials = await loadCredentials(req.user._id);
     res.json({ connected: Boolean(credentials.googleTokens) });
   })
 );
 
 apiRouter.get(
   '/gmail/labels',
-  asyncHandler(async (_req, res) => {
-    res.json({ labels: await fetchLabels() });
+  asyncHandler(async (req, res) => {
+    res.json({ labels: await fetchLabels(req.user._id) });
   })
 );
 
 apiRouter.post(
   '/gmail/disconnect',
-  asyncHandler(async (_req, res) => {
-    await saveCredentials({ googleTokens: null });
+  asyncHandler(async (req, res) => {
+    await saveCredentials(req.user._id, { googleTokens: null });
     res.status(204).send();
   })
 );
@@ -96,7 +96,7 @@ apiRouter.get(
   '/gmail/emails',
   asyncHandler(async (req, res) => {
     const labelId = req.query.labelId || 'INBOX';
-    const emails = await fetchEmails(15, labelId);
+    const emails = await fetchEmails(req.user._id, labelId);
     res.json({ emails });
   })
 );
@@ -171,16 +171,16 @@ apiRouter.post(
 
 apiRouter.get(
   '/trello/validate',
-  asyncHandler(async (_req, res) => {
-    res.json({ member: await validateTrelloCredentials() });
+  asyncHandler(async (req, res) => {
+    res.json({ member: await validateTrelloCredentials(req.user._id) });
   })
 );
 
 apiRouter.get(
   '/trello/boards',
-  asyncHandler(async (_req, res) => {
-    const boards = await fetchBoards();
-    const automations = await listAutomations();
+  asyncHandler(async (req, res) => {
+    const boards = await fetchBoards(req.user._id);
+    const automations = await listAutomations(req.user._id);
     const automationsByBoard = new Map(
       automations.map((automation) => [automation.trelloBoardId, automation])
     );
@@ -198,7 +198,7 @@ apiRouter.get(
   '/trello/lists',
   asyncHandler(async (req, res) => {
     const boardId = z.string().min(1).parse(req.query.boardId);
-    res.json({ lists: await fetchLists(boardId) });
+    res.json({ lists: await fetchLists(req.user._id, boardId) });
   })
 );
 
@@ -206,7 +206,7 @@ apiRouter.get(
   '/trello/boards/:boardId/members',
   asyncHandler(async (req, res) => {
     const boardId = z.string().min(1).parse(req.params.boardId);
-    res.json({ members: await fetchBoardMembers(boardId) });
+    res.json({ members: await fetchBoardMembers(req.user._id, boardId) });
   })
 );
 
@@ -264,8 +264,8 @@ apiRouter.post(
 
 apiRouter.get(
   '/sync/pending',
-  asyncHandler(async (_req, res) => {
-    const automations = await listAutomations();
+  asyncHandler(async (req, res) => {
+    const automations = await listAutomations(req.user._id);
     const favoriteBoardIds = automations
       .filter((a) => a.favorite)
       .map((a) => a.trelloBoardId);
@@ -274,8 +274,8 @@ apiRouter.get(
 
     for (const boardId of favoriteBoardIds) {
       try {
-        const lists = await fetchLists(boardId);
-        const cards = await fetchCards(boardId);
+        const lists = await fetchLists(req.user._id, boardId);
+        const cards = await fetchCards(req.user._id, boardId);
         const { cardsWithoutJiraLink } = selectSyncCandidates({ cards, lists });
         
         const boardName = automations.find(a => a.trelloBoardId === boardId)?.trelloBoardName || boardId;
@@ -296,8 +296,8 @@ apiRouter.get(
 
 apiRouter.get(
   '/jira/projects',
-  asyncHandler(async (_req, res) => {
-    res.json({ projects: await fetchJiraProjects() });
+  asyncHandler(async (req, res) => {
+    res.json({ projects: await fetchJiraProjects(req.user._id) });
   })
 );
 
@@ -356,8 +356,8 @@ apiRouter.post(
 
 apiRouter.get(
   '/jira/alerts',
-  asyncHandler(async (_req, res) => {
-    res.json({ alerts: await getJiraAlerts() });
+  asyncHandler(async (req, res) => {
+    res.json({ alerts: await getJiraAlerts(req.user._id) });
   })
 );
 
@@ -365,18 +365,18 @@ apiRouter.post(
   '/jira/alerts/read',
   asyncHandler(async (req, res) => {
     const { id } = z.object({ id: z.string().min(1) }).parse(req.body);
-    await markAsRead(id);
+    await markAsRead(req.user._id, id);
     res.status(204).send();
   })
 );
 
 apiRouter.get(
   '/dashboard/stats',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     res.json({
-      jiraAssigned: 0,
-      jiraAlertsCount: 0,
-      trelloAlertsCount: 0,
+      jiraAssigned: await getAssignedIssuesCount(req.user._id),
+      jiraAlertsCount: (await getJiraAlerts(req.user._id)).length,
+      trelloAlertsCount: (await getLiveAlerts(req.user._id)).length,
       unsyncedCount: 0,
       jiraSearchUrl: ''
     });
@@ -385,8 +385,8 @@ apiRouter.get(
 
 apiRouter.get(
   '/alerts',
-  asyncHandler(async (_req, res) => {
-    res.json({ alerts: await getLiveAlerts() });
+  asyncHandler(async (req, res) => {
+    res.json({ alerts: await getLiveAlerts(req.user._id) });
   })
 );
 
@@ -399,6 +399,6 @@ apiRouter.post(
       attachment: z.string().optional()
     }).parse(req.body);
     
-    res.json({ result: await addComment(cardId, text, attachment) });
+    res.json({ result: await addComment(req.user._id, cardId, text, attachment) });
   })
 );
