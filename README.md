@@ -1,100 +1,82 @@
-# PO Assistant
+# PO Assistant - Known Online Edition
 
-A production-minded MVP for Product Owners who use Trello with clients and Jira internally. This tool bridges the gap between client-facing boards and internal development workflows.
+PO Assistant es una plataforma integral diseñada para optimizar el flujo de trabajo de los Product Owners de Known Online. Facilita la sincronización inteligente entre Trello y Jira, la gestión de alertas en tiempo real y la automatización mediante IA, todo bajo una arquitectura multi-usuario segura.
 
-Spanish instructions are available in [README.es.md](README.es.md).
+## 🚀 Funcionalidades Principales
 
-## Key Features
+### 1. Sistema Multi-Usuario & Roles
+- **Autenticación Segura:** Sistema de login con JWT y contraseñas encriptadas con bcrypt.
+- **Roles Diferenciados:**
+  - **Admin:** Control total del sistema, gestión de usuarios (crear, pausar, eliminar) y configuración de credenciales globales.
+  - **PO (User):** Acceso a herramientas de trabajo y sincronización sin necesidad de configurar APIs técnicas.
+- **Aislamiento de Datos:** Cada usuario gestiona sus propios tableros favoritos y configuraciones personales.
 
-### 📊 Dashboard
-- Get a high-level overview of your workspace status.
-- Monitor Trello and Jira integration health at a glance.
+### 2. Trello-Jira Sync (Inteligente)
+- **Sincronización Automática:** Convierte tarjetas de Trello en Issues de Jira con un solo clic.
+- **Refinamiento con IA:** Integración con Google Gemini para mejorar descripciones, detectar criterios de aceptación y limpiar el lenguaje técnico antes de enviar a Jira.
+- **Detección de Duplicados:** Evita crear tareas repetidas vinculando automáticamente las existentes.
+- **Soporte de Adjuntos:** Sube imágenes y archivos directamente de Trello a Jira durante la sincronización.
 
-### 📋 Board Management
-- List all your Trello boards.
-- Mark frequently used boards as **Favorites** for quick access.
-- Configure specific automation rules for each board.
+### 3. Centro de Alertas Trello
+- **Feed en Tiempo Real:** Monitoriza comentarios, movimientos de listas y creación de tarjetas en tableros favoritos.
+- **Respuestas con Menciones:** Botón "Responder" que incluye automáticamente el `@arroba` del autor original para agilizar la comunicación.
+- **Filtros Dinámicos:** Filtra alertas por tablero específico.
 
-### 🔄 Trello to Jira Sync
-- Select a Trello board and list to sync.
-- **Sync Preview**: View cards eligible for synchronization before running the process.
-- **Smart Filtering**: Automatically identifies cards that are already synced or those that belong to specific workflows (like Sprints).
-- **Automated Issue Creation**: Create Jira issues (Stories, Tasks, etc.) directly from Trello cards.
+### 4. POsito - Asistente de Estado (IA)
+- **Chatbot Integrado:** Asistente inteligente entrenado para responder consultas sobre el estado de los proyectos, tableros y flujos de trabajo de Known Online.
 
-### 🔔 Smart Alerts & Notifications
-- **Live Feed**: Stay updated with Trello and Jira mentions and activity.
-- **Direct Interaction**: Reply to Trello comments directly from the app.
-- **Attachments**: Support for sending text and image attachments in replies.
-- **Jira Activity**: Dedicated feed for Jira-specific alerts and updates.
+### 5. Gmail Insight (Beta)
+- **Lectura de Correos:** Conexión con Gmail para listar y resumir hilos de correos relevantes para el PO usando IA.
 
-### ⚙️ Secure Settings
-- **Local Encryption**: All Trello and Jira API credentials are stored locally using AES-256 encryption.
-- **Configuration Status**: Easily verify if your integrations are correctly set up.
+---
 
-### 🎨 User Experience
-- **Multi-language**: Full support for English and Spanish.
-- **Dark/Light Mode**: Optimized UI for any lighting condition.
-- **Action Logs**: Detailed history of operations performed within the app.
+## 🛠️ Stack Tecnológico
 
-## What Works Now
+### Frontend (Client)
+- **React 18** (Vite)
+- **Lucide React** (Iconografía)
+- **CSS3 Moderno** (Diseño basado en el manual de identidad de Known Online)
+- **Contexto de Usuario:** Gestión de sesiones persistentes.
 
-- Secure credential storage.
-- Fetching Trello boards, lists, and cards.
-- Selection of automation targets (Jira project and issue type) per Trello board.
-- Manual execution of board automations.
-- Real-time alert feed with reply capability.
-- Multi-language and theme switching.
+### Backend (Server)
+- **Node.js & Express**
+- **MongoDB Atlas** (Persistencia de datos)
+- **Mongoose** (Modelado de datos)
+- **JWT (JSON Web Tokens)** (Seguridad de API)
+- **Integraciones:** Trello API, Jira API, Google Gemini API, Google OAuth 2.0.
 
-## Setup
+---
 
-1. Install dependencies:
+## ⚙️ Configuración del Entorno
 
-   ```bash
-   npm install
-   npm --prefix server install
-   npm --prefix client install
-   ```
+### Variables de Entorno (Backend `.env`)
+```env
+PORT=4000
+MONGODB_URI=tu_url_de_atlas
+JWT_SECRET=tu_frase_secreta_para_tokens
+CREDENTIAL_SECRET=tu_contraseña_maestra_de_encriptacion
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+REDIRECT_URI=...
+```
 
-2. Configure environment:
+### Variables de Entorno (Frontend `.env`)
+```env
+VITE_API_BASE=https://tu-api-en-render.com/api
+```
 
-   ```bash
-   copy server\.env.example server\.env
-   ```
+---
 
-   Update `CREDENTIAL_SECRET` with a long random value before storing real credentials.
+## 📦 Instalación y Despliegue
 
-3. Run locally:
+### Local
+1. Instalar dependencias: `npm install` (en raíz, client y server).
+2. Levantar ambos servicios: `npm run dev` desde la raíz.
 
-   ```bash
-   npm run dev
-   ```
+### Producción
+- **Frontend:** Recomendado desplegar en Netlify o Vercel apuntando a la carpeta `client`.
+- **Backend:** Recomendado desplegar en Render.com apuntando a la carpeta `server`.
 
-   Frontend: http://localhost:5173  
-   Backend: http://localhost:4000
+---
 
-## Where To Input API Keys
-
-Open the app, go to **Settings**, and enter:
-
-- Trello API Key
-- Trello Token
-- Jira Base URL
-- Jira Email
-- Jira API Token
-
-## API Endpoints
-
-- `GET /api/health` - Check API status.
-- `GET /api/settings/status` - Check if credentials are configured.
-- `POST /api/settings` - Save credentials.
-- `GET /api/trello/boards` - Fetch Trello boards.
-- `GET /api/jira/projects` - Fetch Jira projects.
-- `GET /api/alerts` - Fetch live alerts.
-- `POST /api/alerts/reply` - Reply to an alert.
-- `POST /api/automations/:id/run` - Run a specific automation.
-
-## Next Steps
-
-- Scheduled polling for background sync.
-- Richer Jira field mapping (assignees, labels, custom fields).
-- Performance reports and sync history.
+© 2026 Known Online. Todos los derechos reservados.
