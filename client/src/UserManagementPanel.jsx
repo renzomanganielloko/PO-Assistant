@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserPlus, Trash2, Shield, User, Loader2, Mail, Lock, UserCircle } from 'lucide-react';
-import { api } from './api';
+import { api } from './api.js';
 
 export function UserManagementPanel({ language, t }) {
   const [users, setUsers] = useState([]);

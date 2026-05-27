@@ -1463,18 +1463,3 @@ function JiraAlertsPage({ alerts, loading, t, language, onRefresh, onMarkAsRead 
     </section>
   );
 }
-v>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-{t.jiraAlerts.noAlerts}</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
