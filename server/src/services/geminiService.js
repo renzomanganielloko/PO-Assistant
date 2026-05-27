@@ -4,12 +4,12 @@ import { loadCredentials } from '../storage/credentialsStore.js';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const FALLBACK_MODELS = ['gemini-2.5-flash-lite'];
 
-export async function generateGeminiText(prompt) {
-  const credentials = await loadCredentials();
+export async function generateGeminiText(userId, prompt) {
+  const credentials = await loadCredentials(userId);
   const apiKey = credentials.geminiApiKey;
 
   if (!apiKey) {
-    throw new Error('API Key no encontrada. Configurala en Settings.');
+    throw new Error('API Key de Gemini no encontrada. Configurala en la pestaña Credenciales.');
   }
 
   const models = [
@@ -79,10 +79,10 @@ function isQuotaError(error, message = '') {
     msg.includes('resource exhausted');
 }
 
-export async function summarizeText(text, type = 'corto') {
+export async function summarizeText(userId, text, type = 'corto') {
   const prompt = type === 'detallado'
     ? `Resumen detallado en espanol, con puntos clave:\n\n${text}`
     : `Resumen muy breve y claro en espanol (maximo 2 oraciones):\n\n${text}`;
 
-  return generateGeminiText(prompt);
+  return generateGeminiText(userId, prompt);
 }

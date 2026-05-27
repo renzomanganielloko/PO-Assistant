@@ -136,7 +136,7 @@ export async function getUnreadEmailCount(userId, labelId = 'INBOX') {
   return res.data.messagesUnread || 0;
 }
 
-export async function summarizeEmail(email) {
+export async function summarizeEmail(userId, email) {
   try {
     const prompt = `
       Eres un asistente eficiente. Resume el siguiente correo electronico en una o dos oraciones maximo.
@@ -149,7 +149,7 @@ export async function summarizeEmail(email) {
       Resumen corto:
     `;
 
-    return generateGeminiText(prompt);
+    return generateGeminiText(userId, prompt);
   } catch (error) {
     console.error('[Gmail AI] Summarization failed:', error.message);
     return 'No se pudo generar el resumen.';

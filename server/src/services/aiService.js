@@ -1,6 +1,6 @@
 import { generateGeminiText } from './geminiService.js';
 
-export async function refineTicket(summary, description) {
+export async function refineTicket(userId, summary, description) {
   const prompt = `
     Eres un Product Owner experto refinando tareas para un equipo de desarrollo.
     Tu objetivo es transformar una descripcion basica de Trello en un ticket de Jira profesional.
@@ -35,5 +35,5 @@ export async function refineTicket(summary, description) {
     Responde UNICAMENTE con el texto formateado para Jira, sin preambulos ni explicaciones.
   `;
 
-  return generateGeminiText(prompt);
+  return generateGeminiText(userId, prompt);
 }

@@ -60,7 +60,7 @@ apiRouter.post(
         type: z.enum(['corto', 'detallado']).optional().default('corto')
       }).parse(req.body);
       
-      const result = await summarizeText(text, type);
+      const result = await summarizeText(req.user._id, text, type);
       res.json({ result });
     } catch (error) {
       if (error.message.includes('límite gratuito')) {

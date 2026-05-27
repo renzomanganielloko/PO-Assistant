@@ -57,7 +57,7 @@ async function processSingleCard(userId, card, automation, listName, allMappings
   if (automation.refineAI && isNewCreation) {
     console.log(`[Sync] Refining description with AI for ${card.title}`);
     try {
-      finalDescription = await refineTicket(card.title, card.description);
+      finalDescription = await refineTicket(userId, card.title, card.description);
     } catch (error) {
       aiError = error.message;
       console.error(`[Sync] AI refinement failed for ${card.title}:`, error.message);
