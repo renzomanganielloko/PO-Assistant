@@ -28,6 +28,9 @@ const userSchema = new mongoose.Schema({
 // Hash password before saving
 userSchema.pre('save', async function() {
   if (!this.isModified('password')) return;
+  // Make sure we only hash if it's not already a bcrypt hash (starts with $2b$ or $2a$)
+  if (this.password.startsWith('$2b$') || this.password.startsWith('$2a$')) return;
+  
   this.password = await bcrypt.hash(this.password, 10);
 });
 
