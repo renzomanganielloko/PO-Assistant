@@ -25,11 +25,13 @@ app.use(
   cors({
     origin(origin, callback) {
       const allowedLocalOrigin = !origin || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
-      if (allowedLocalOrigin) {
+      const isNetlify = origin && origin.includes('netlify.app');
+      
+      if (allowedLocalOrigin || isNetlify) {
         callback(null, true);
         return;
       }
-      callback(null, true); // Fallback to true for development
+      callback(null, true); // Fallback for testing, but better to be explicit
     }
   })
 );
