@@ -358,7 +358,7 @@ select {
 
 .listHeader {
   display: grid;
-  grid-template-columns: 1.5fr 2fr 0.8fr 100px;
+  grid-template-columns: 1.5fr 2fr 0.8fr 120px;
   padding: 12px 24px;
   font-size: 12px;
   font-weight: 800;
@@ -368,7 +368,7 @@ select {
 
 .userRow {
   display: grid;
-  grid-template-columns: 1.5fr 2fr 0.8fr 100px;
+  grid-template-columns: 1.5fr 2fr 0.8fr 120px;
   align-items: center;
   padding: 16px 24px;
   background: var(--ko-bg-card);
@@ -386,6 +386,7 @@ select {
   display: flex;
   align-items: center;
   gap: 12px;
+  overflow: hidden;
 }
 
 .userAvatar {
@@ -398,6 +399,7 @@ select {
   place-items: center;
   font-weight: 800;
   font-size: 14px;
+  flex-shrink: 0;
 }
 
 .roleBadge {
@@ -414,6 +416,7 @@ select {
 .userActions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
 
 .deleteBtn {
