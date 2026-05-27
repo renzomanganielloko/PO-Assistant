@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { AlertCircle, Bot, CheckCircle2, ClipboardList, KeyRound, ListChecks, Play, RefreshCw, Save, Star, Moon, Sun, Bell, MessageSquare, ArrowRightLeft, PlusCircle, ExternalLink, Send, Search, User, X, Activity, List, ListOrdered, Bold, Image as ImageIcon, Mail } from 'lucide-react';
+import { AlertCircle, Bot, CheckCircle2, ClipboardList, KeyRound, ListChecks, Play, RefreshCw, Save, Star, Moon, Sun, Bell, MessageSquare, ArrowRightLeft, PlusCircle, ExternalLink, Send, Search, User, X, Activity, List, ListOrdered, Bold, Image as ImageIcon, Mail, Minus } from 'lucide-react';
 import { api } from './api.js';
 import { formatMessage, translations } from './i18n.js';
 import { GmailPanel } from './GmailPanel.jsx';
@@ -56,6 +56,7 @@ export function App() {
   const [showReportBoardId, setShowReportBoardId] = useState(null);
   const [selectedBoardId, setSelectedBoardId] = useState('');
   const [selectedListId, setSelectedListId] = useState('');
+  const [pendingRefineAI, setPendingRefineAI] = useState(false);
   const [alerts, setAlerts] = useState([]);
   const [jiraAlerts, setJiraAlerts] = useState([]);
   const [loading, setLoading] = useState('');
@@ -297,7 +298,7 @@ export function App() {
   async function syncSingleCard(cardId, boardId) {
     const result = await run(
       `syncCard:${cardId}`,
-      () => api.syncCard({ cardId, boardId }),
+      () => api.syncCard({ cardId, boardId, refineAI: pendingRefineAI }),
       language === 'es' ? 'Tarea enviada a Jira con éxito.' : 'Task sent to Jira successfully.'
     );
     if (result) {
@@ -319,6 +320,33 @@ export function App() {
         current.map((item) => (item.id === board.id ? { ...item, automation: result.automation } : item))
       );
     }
+  }
+
+  function credentialFieldStatus(field) {
+    const currentValue = settings[field] || '';
+    if (currentValue.trim()) {
+      return {
+        state: 'pending',
+        label: language === 'es' ? 'Sin guardar' : 'Unsaved'
+      };
+    }
+
+    const diagnostics = status?.diagnostics || {};
+    const configured = {
+      trelloApiKey: (diagnostics.trelloApiKey?.length || 0) > 0,
+      trelloToken: (diagnostics.trelloTokenLength || 0) > 0,
+      jiraBaseUrl: Boolean(status?.jiraBaseUrl),
+      jiraEmail: Boolean(diagnostics.jiraEmail),
+      jiraApiToken: (diagnostics.jiraApiTokenLength || 0) > 0,
+      geminiApiKey: Boolean(status?.geminiConfigured || (diagnostics.geminiApiKey?.length || 0) > 0)
+    }[field];
+
+    return {
+      state: configured ? 'ready' : 'missing',
+      label: configured
+        ? (language === 'es' ? 'Cargado' : 'Loaded')
+        : (language === 'es' ? 'No cargado' : 'Not loaded')
+    };
   }
 
   return (
@@ -384,10 +412,6 @@ export function App() {
             >
               {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
             </button>
-            <div className="statusPills">
-              <StatusPill label="Trello" ready={status?.trelloConfigured} t={t} />
-              <StatusPill label="Jira" ready={status?.jiraConfigured} t={t} />
-            </div>
           </div>
         </header>
 
@@ -396,12 +420,12 @@ export function App() {
         {activePage === 'settings' && (
           <section className="panel">
             <form className="settingsGrid" onSubmit={saveSettings}>
-              <Field label={t.settings.trelloApiKey} value={settings.trelloApiKey} onChange={(trelloApiKey) => setSettings({ ...settings, trelloApiKey })} />
-              <Field label={t.settings.trelloToken} type="password" value={settings.trelloToken} onChange={(trelloToken) => setSettings({ ...settings, trelloToken })} />
-              <Field label={t.settings.jiraBaseUrl} placeholder="https://your-domain.atlassian.net" value={settings.jiraBaseUrl} onChange={(jiraBaseUrl) => setSettings({ ...settings, jiraBaseUrl })} />
-              <Field label={t.settings.jiraEmail} value={settings.jiraEmail} onChange={(jiraEmail) => setSettings({ ...settings, jiraEmail })} />
-              <Field label={t.settings.jiraApiToken} type="password" value={settings.jiraApiToken} onChange={(jiraApiToken) => setSettings({ ...settings, jiraApiToken })} />
-              <Field label={t.settings.geminiApiKey} type="password" value={settings.geminiApiKey} onChange={(geminiApiKey) => setSettings({ ...settings, geminiApiKey })} />
+              <Field label={t.settings.trelloApiKey} status={credentialFieldStatus('trelloApiKey')} type="password" value={settings.trelloApiKey} onChange={(trelloApiKey) => setSettings({ ...settings, trelloApiKey })} />
+              <Field label={t.settings.trelloToken} status={credentialFieldStatus('trelloToken')} type="password" value={settings.trelloToken} onChange={(trelloToken) => setSettings({ ...settings, trelloToken })} />
+              <Field label={t.settings.jiraBaseUrl} status={credentialFieldStatus('jiraBaseUrl')} placeholder="https://your-domain.atlassian.net" value={settings.jiraBaseUrl} onChange={(jiraBaseUrl) => setSettings({ ...settings, jiraBaseUrl })} />
+              <Field label={t.settings.jiraEmail} status={credentialFieldStatus('jiraEmail')} value={settings.jiraEmail} onChange={(jiraEmail) => setSettings({ ...settings, jiraEmail })} />
+              <Field label={t.settings.jiraApiToken} status={credentialFieldStatus('jiraApiToken')} type="password" value={settings.jiraApiToken} onChange={(jiraApiToken) => setSettings({ ...settings, jiraApiToken })} />
+              <Field label={t.settings.geminiApiKey} status={credentialFieldStatus('geminiApiKey')} type="password" value={settings.geminiApiKey} onChange={(geminiApiKey) => setSettings({ ...settings, geminiApiKey })} />
               <div className="actions">                <button className="primary" disabled={loading === 'settings'}>
                   <CheckCircle2 size={18} /> {t.settings.save}
                 </button>
@@ -499,6 +523,14 @@ export function App() {
                 <RefreshCw size={18} className={loading === 'pendingCards' ? 'spin' : ''} /> {t.sync.fetchCards}
               </button>
             </div>
+            <label className="toggle pendingAiToggle">
+              <input
+                type="checkbox"
+                checked={pendingRefineAI}
+                onChange={(event) => setPendingRefineAI(event.target.checked)}
+              />
+              {t.sync.refineAI}
+            </label>
             
             <div className="cardTable">
               <div className="tableHeader">
@@ -545,7 +577,7 @@ export function App() {
                       style={{ width: '100%' }}
                     >
                       {isSyncing ? <RefreshCw size={14} className="spin" /> : <Play size={14} />}
-                      {t.sync.sendToJira}
+                      {isSyncing ? t.sync.sendingToJira : t.sync.sendToJira}
                     </button>
                   </div>
                 );
@@ -612,6 +644,196 @@ export function App() {
           </div>
         </div>
       )}
+      <PositoChat />
+    </div>
+  );
+}
+
+function PositoChat() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [allQuestions, setAllQuestions] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [messages, setMessages] = useState([
+    {
+      role: 'assistant',
+      text: 'Hola, soy POsito. ¿Sobre qué querés consultar hoy?'
+    }
+  ]);
+  const [draft, setDraft] = useState('');
+  const [isThinking, setIsThinking] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isThinking]);
+
+  useEffect(() => {
+    api.assistantQuestions()
+      .then((result) => {
+        const cats = result.categories || [];
+        const qs = result.questions || [];
+        setAllQuestions(qs);
+        setCategories(cats);
+        
+        // Populate initial message with categories
+        setMessages(current => {
+          if (current.length === 1 && current[0].role === 'assistant' && !current[0].suggestions) {
+            return [{
+              ...current[0],
+              suggestions: cats.map(c => ({ ...c, type: 'category' }))
+            }];
+          }
+          return current;
+        });
+      })
+      .catch(console.error);
+  }, []);
+
+  async function handleSelect(item) {
+    if (item.type === 'category') {
+      const filtered = allQuestions.filter(q => q.categoryId === item.id);
+      setMessages(current => [
+        ...current,
+        { role: 'user', text: item.text },
+        {
+          role: 'assistant',
+          text: `Preguntas sobre ${item.text}:`,
+          suggestions: [
+            ...filtered.map(q => ({ ...q, type: 'question' })),
+            { id: 'back', text: '⬅️ Volver a temas principales', type: 'back' }
+          ]
+        }
+      ]);
+    } else if (item.type === 'back') {
+      setMessages(current => [
+        ...current,
+        {
+          role: 'assistant',
+          text: '¿Sobre qué otro tema querés consultar?',
+          suggestions: categories.map(c => ({ ...c, type: 'category' }))
+        }
+      ]);
+    } else {
+      ask(item);
+    }
+  }
+
+  async function ask(question) {
+    const text = question?.text || draft.trim();
+    if (!text || isThinking) return;
+
+    if (!question) {
+      setMessages(current => [...current, { role: 'user', text }]);
+    }
+    
+    setDraft('');
+    setIsThinking(true);
+
+    try {
+      const result = await api.assistantQuery({
+        questionId: question?.id,
+        text
+      });
+      setMessages(current => [
+        ...current,
+        {
+          role: 'assistant',
+          text: result.answer,
+          details: result.details || [],
+          suggestions: (result.suggestions || []).length > 0 
+            ? result.suggestions.map(s => ({ ...s, type: 'question' }))
+            : [{ id: 'back-auto', text: '⬅️ Ver otros temas', type: 'back' }]
+        }
+      ]);
+    } catch (error) {
+      setMessages(current => [
+        ...current,
+        {
+          role: 'assistant',
+          text: error.message || 'POsito no pudo responder esa consulta.',
+          suggestions: [{ id: 'back-err', text: '⬅️ Volver al inicio', type: 'back' }]
+        }
+      ]);
+    } finally {
+      setIsThinking(false);
+    }
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    ask();
+  }
+
+  return (
+    <div className={`positoWidget ${isOpen ? 'open' : ''}`}>
+      {isOpen && (
+        <section className="positoPanel" aria-label="POsito">
+          <header className="positoHeader">
+            <div>
+              <strong>POsito</strong>
+              <span>Asistente de estado</span>
+            </div>
+            <div className="positoHeaderActions">
+              <button className="positoActionBtn" onClick={() => setIsOpen(false)} aria-label="Minimizar POsito">
+                <Minus size={18} />
+              </button>
+              <button className="positoActionBtn" onClick={() => setIsOpen(false)} aria-label="Cerrar POsito">
+                <X size={18} />
+              </button>
+            </div>
+          </header>
+
+          <div className="positoMessages">
+            {messages.map((message, index) => (
+              <div key={index} className={`positoMessage ${message.role}`}>
+                <p>{message.text}</p>
+                {message.details?.length > 0 && (
+                  <ul>
+                    {message.details.map((detail, detailIndex) => (
+                      <li key={detailIndex}>{detail}</li>
+                    ))}
+                  </ul>
+                )}
+                {message.suggestions?.length > 0 && (
+                  <div className="positoSuggestionsInChat">
+                    {message.suggestions.map((suggestion, sIdx) => (
+                      <button key={`${suggestion.id}-${sIdx}`} type="button" onClick={() => handleSelect(suggestion)}>
+                        {suggestion.text}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            {isThinking && (
+              <div className="positoMessage assistant">
+                <p>Consultando datos...</p>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <form className="positoInput" onSubmit={handleSubmit}>
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="Preguntale a POsito..."
+            />
+            <button type="submit" disabled={!draft.trim() || isThinking} aria-label="Enviar pregunta">
+              <Send size={16} />
+            </button>
+          </form>
+        </section>
+      )}
+
+      <button className="positoLauncher" onClick={() => setIsOpen(current => !current)}>
+        <Bot size={22} />
+        <span>POsito</span>
+      </button>
     </div>
   );
 }
@@ -688,6 +910,26 @@ function AlertCard({ alert, t, loading, onReply, language }) {
   const [mentionSearch, setMentionSearch] = useState(null);
   const [activeMemberIndex, setActiveMemberIndex] = useState(0);
   const editorRef = useRef(null);
+
+  useEffect(() => {
+    if (isReplying && alert.type === 'comment' && alert.username) {
+      // Small timeout to ensure editorRef is mounted
+      setTimeout(() => {
+        if (editorRef.current && editorRef.current.innerHTML === '') {
+          editorRef.current.innerHTML = `<strong style="color: var(--ko-orange);" contenteditable="false">@${alert.username}</strong>&nbsp;`;
+          
+          // Place cursor at the end
+          const range = document.createRange();
+          range.selectNodeContents(editorRef.current);
+          range.collapse(false);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          editorRef.current.focus();
+        }
+      }, 50);
+    }
+  }, [isReplying, alert.username, alert.type]);
 
   useEffect(() => {
     if (isReplying && alert.boardId) {
@@ -1034,7 +1276,10 @@ function BoardCard({
               onClick={onRun}
               disabled={!automationReady || loading === `runAutomation:${board.id}`}
             >
-              <Play size={16} /> {t.boards.run}
+              {loading === `runAutomation:${board.id}`
+                ? <RefreshCw size={16} className="spin" />
+                : <Play size={16} />}
+              {loading === `runAutomation:${board.id}` ? t.boards.running : t.boards.run}
             </button>
           </div>
         </div>
@@ -1043,14 +1288,18 @@ function BoardCard({
   );
 }
 
-function StatusPill({ label, ready, t }) {
-  return <span className={ready ? 'pill ready' : 'pill'}>{label}: {ready ? t.status.ready : t.status.missing}</span>;
-}
-
-function Field({ label, value, onChange, type = 'text', placeholder = '' }) {
+function Field({ label, value, onChange, type = 'text', placeholder = '', status }) {
   return (
     <label className="field">
-      <span>{label}</span>
+      <span className="fieldHeader">
+        <span>{label}</span>
+        {status && (
+          <span className={`fieldSyncStatus ${status.state}`}>
+            {status.state === 'ready' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+            {status.label}
+          </span>
+        )}
+      </span>
       <input type={type} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
@@ -1077,6 +1326,9 @@ function AutomationReport({ report, t }) {
                 <a href={item.jiraIssueUrl} target="_blank" rel="noopener noreferrer" className="jiraLink">
                   {item.jiraIssueKey}
                 </a>
+                {item.aiError && (
+                  <span className="dimmed"> · IA no refinada: {item.aiError}</span>
+                )}
               </li>
             ))}
           </ul>

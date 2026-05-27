@@ -53,9 +53,15 @@ async function processSingleCard(card, automation, listName, allMappings) {
 
   // 2. Refine description with AI if enabled
   let finalDescription = card.description;
-  if (automation.refineAI) {
+  let aiError = '';
+  if (automation.refineAI && isNewCreation) {
     console.log(`[Sync] Refining description with AI for ${card.title}`);
-    finalDescription = await refineTicket(card.title, card.description);
+    try {
+      finalDescription = await refineTicket(card.title, card.description);
+    } catch (error) {
+      aiError = error.message;
+      console.error(`[Sync] AI refinement failed for ${card.title}:`, error.message);
+    }
   }
 
   // 3. Process Attachments and embed images in description
@@ -72,33 +78,46 @@ async function processSingleCard(card, automation, listName, allMappings) {
   const attachmentMap = {}; 
   let hasNewUploads = false;
 
-  for (const attachment of attachments) {
-    const isImage = IMAGE_EXTENSIONS.some(ext => attachment.url.toLowerCase().includes(ext)) || 
-                    attachment.url.includes('/download/') || 
-                    attachment.url.includes('previews');
+  // 3. Process Attachments - ONLY for new creations to avoid redundant uploads and 'repairs'
+  if (isNewCreation) {
+    const attachments = [...(cardPayload.attachments || [])];
+    const descImageRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g;
+    let descMatch;
+    while ((descMatch = descImageRegex.exec(finalDescription)) !== null) {
+      const url = descMatch[1];
+      if (!attachments.some(a => a.url === url)) {
+        attachments.push({ name: 'description_image.webp', url });
+      }
+    }
 
-    if (isImage) {
-      try {
-        let filename = attachment.url.split('/').pop().split('?')[0] || 'image.webp';
-        if (!IMAGE_EXTENSIONS.some(ext => filename.toLowerCase().endsWith(ext))) {
-           filename += '.webp';
-        }
+    for (const attachment of attachments) {
+      const isImage = IMAGE_EXTENSIONS.some(ext => attachment.url.toLowerCase().includes(ext)) || 
+                      attachment.url.includes('/download/') || 
+                      attachment.url.includes('previews');
 
-        const buffer = await downloadAttachment(attachment.url);
-        const uploadResult = await uploadAttachmentToJira(finalIssue.key, { filename, buffer });
-        
-        if (uploadResult && uploadResult[0]) {
-          attachmentMap[attachment.url] = uploadResult[0].id;
-          hasNewUploads = true;
+      if (isImage) {
+        try {
+          let filename = attachment.url.split('/').pop().split('?')[0] || 'image.webp';
+          if (!IMAGE_EXTENSIONS.some(ext => filename.toLowerCase().endsWith(ext))) {
+             filename += '.webp';
+          }
+
+          const buffer = await downloadAttachment(attachment.url);
+          const uploadResult = await uploadAttachmentToJira(finalIssue.key, { filename, buffer });
+          
+          if (uploadResult && uploadResult[0]) {
+            attachmentMap[attachment.url] = uploadResult[0].id;
+            hasNewUploads = true;
+          }
+        } catch (err) {
+          console.error(`[Sync] Attachment error (${attachment.name}):`, err.message);
         }
-      } catch (err) {
-        console.error(`[Sync] Attachment error (${attachment.name}):`, err.message);
       }
     }
   }
 
   // 4. Update description if needed
-  if (hasNewUploads || isNewCreation || automation.refineAI) {
+  if (isNewCreation && (hasNewUploads || automation.refineAI)) {
     const finalDescriptionAdf = toAdf(finalDescription, attachmentMap);
     await updateIssueDescription(finalIssue.key, finalDescriptionAdf);
   }
@@ -108,6 +127,7 @@ async function processSingleCard(card, automation, listName, allMappings) {
     await attachUrlToCard(card.id, { name: finalIssue.key, url: finalIssue.browseUrl });
   }
   try {
+    // createJiraRemoteLink now checks for duplicates internally
     await createJiraRemoteLink(finalIssue.key, { title: 'Link a Trello', url: card.url });
   } catch (e) { /* silent */ }
 
@@ -129,7 +149,8 @@ async function processSingleCard(card, automation, listName, allMappings) {
     title: card.title,
     jiraIssueKey: finalIssue.key,
     jiraIssueUrl: finalIssue.browseUrl,
-    isNew: isNewCreation
+    isNew: isNewCreation,
+    aiError
   };
 }
 

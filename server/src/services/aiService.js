@@ -1,54 +1,39 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { loadCredentials } from '../storage/credentialsStore.js';
+import { generateGeminiText } from './geminiService.js';
 
 export async function refineTicket(summary, description) {
-  const credentials = await loadCredentials();
-  const apiKey = credentials.geminiApiKey;
+  const prompt = `
+    Eres un Product Owner experto refinando tareas para un equipo de desarrollo.
+    Tu objetivo es transformar una descripcion basica de Trello en un ticket de Jira profesional.
 
-  if (!apiKey) {
-    console.warn('[AI] Gemini API Key not found. Skipping refinement.');
-    return description;
-  }
+    Titulo de la tarea: ${summary}
+    Descripcion original: ${description || '(sin descripcion)'}
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    IMPORTANTE: Jira NO entiende Markdown (**texto**, # Titulo, [enlace](url)). 
+    Debes usar exclusivamente JIRA WIKI MARKUP:
+    - Encabezados: h1. Nombre de Seccion (siempre empezar con h1.)
+    - Bullets: * Elemento (un solo asterisco seguido de espacio, sin negritas)
+    - Separacion: Deja siempre dos saltos de linea entre secciones.
+    - Negritas: No uses negritas dentro de los bullets ni en los titulos.
 
-    const prompt = `
-      Eres un Product Owner experto refinando tareas para un equipo de desarrollo.
-      Tu objetivo es transformar una descripción básica de Trello en un ticket de Jira profesional y completo.
+    Genera la descripcion siguiendo este esquema EXACTO:
 
-      Título de la tarea: ${summary}
-      Descripción original: ${description}
+    h1. Objetivo
+    (Escribe aqui el objetivo central de la tarea)
 
-      Por favor, genera una nueva descripción estructurada EXACTAMENTE con los siguientes títulos en negrita:
-      
-      **Contexto**
-      (Explica el trasfondo de por qué se necesita esta tarea)
-      
-      **Objetivo**
-      (Define claramente qué se busca lograr)
-      
-      **Consideraciones**
-      (Anota puntos técnicos o de negocio importantes a tener en cuenta)
-      
-      **Implementación**
-      (Sugiere pasos técnicos o lógica de alto nivel para el desarrollador)
-      
-      **Criterios de Aceptación**
-      (Lista los puntos que deben cumplirse para dar la tarea por finalizada)
+    h1. Contexto
+    (Explica el porque de esta tarea y la situacion actual)
 
-      Mantén un tono profesional y técnico. Si la descripción original es muy breve, usa tu conocimiento para inferir los detalles más probables basados en el título.
-      Responde SOLO con el contenido de la nueva descripción.
-    `;
+    h1. Implementacion
+    (Detalla los pasos tecnicos o funcionales a seguir)
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const refinedText = response.text();
+    h1. Criterios de Aceptacion
+    * Item 1
+    * Item 2
+    * Item 3
 
-    return refinedText || description;
-  } catch (error) {
-    console.error('[AI] Refinement failed:', error.message);
-    return description; // Fallback to original description
-  }
+    Manten un tono profesional y tecnico. Si la descripcion original es muy breve, inferi los detalles mas probables basados en el titulo.
+    Responde UNICAMENTE con el texto formateado para Jira, sin preambulos ni explicaciones.
+  `;
+
+  return generateGeminiText(prompt);
 }

@@ -41,6 +41,7 @@ function formatAction(action) {
     id: action.id,
     date,
     user: memberCreator.fullName || memberCreator.username,
+    username: memberCreator.username,
     userId: memberCreator.id,
     boardName: data.board.name,
     boardId: action.boardId,

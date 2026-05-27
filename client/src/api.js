@@ -101,4 +101,10 @@ export const api = {
       method: 'POST', 
       body: JSON.stringify({ text, type }) 
     }),
+  assistantQuestions: () => request('/assistant/questions'),
+  assistantQuery: (payload) =>
+    request('/assistant/query', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
 };

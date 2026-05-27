@@ -14,6 +14,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 
 import { getAuthUrl, setTokens, fetchEmails, summarizeEmail, fetchLabels } from '../services/gmailService.js';
 import { summarizeText } from '../services/geminiService.js';
+import { answerAssistantQuestion, assistantQuestions, assistantCategories } from '../services/assistantService.js';
 
 export const apiRouter = Router();
 
@@ -34,7 +35,7 @@ apiRouter.post(
       if (error.message.includes('límite gratuito')) {
         return res.status(429).json({ message: error.message });
       }
-      throw error;
+      throw new AppError(error.message, 502);
     }
   })
 );
@@ -116,6 +117,28 @@ apiRouter.get('/', (_req, res) => {
 apiRouter.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
+
+apiRouter.get(
+  '/assistant/questions',
+  asyncHandler(async (_req, res) => {
+    res.json({ 
+      questions: assistantQuestions,
+      categories: assistantCategories 
+    });
+  })
+);
+
+apiRouter.post(
+  '/assistant/query',
+  asyncHandler(async (req, res) => {
+    const query = z.object({
+      questionId: z.string().optional(),
+      text: z.string().optional().default('')
+    }).parse(req.body);
+
+    res.json(await answerAssistantQuestion(query));
+  })
+);
 
 apiRouter.get(
   '/settings/status',
@@ -283,15 +306,16 @@ apiRouter.post(
 apiRouter.post(
   '/sync/card',
   asyncHandler(async (req, res) => {
-    const { cardId, boardId } = z.object({ 
+    const { cardId, boardId, refineAI } = z.object({
       cardId: z.string().min(1), 
-      boardId: z.string().min(1) 
+      boardId: z.string().min(1),
+      refineAI: z.boolean().optional()
     }).parse(req.body);
     
     const automation = await findAutomationByBoardId(boardId);
     if (!automation) throw new AppError('No automation configured for this board.', 400);
     
-    res.json({ result: await syncSingleCard(cardId, automation) });
+    res.json({ result: await syncSingleCard(cardId, { ...automation, refineAI: refineAI ?? automation.refineAI }) });
   })
 );
 

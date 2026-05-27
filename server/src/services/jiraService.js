@@ -183,7 +183,22 @@ export async function createJiraIssue({ projectKey, issueType, cardPayload, trel
 
 export async function createJiraRemoteLink(issueKey, { title, url }) {
   const client = await jiraClient();
-  const { data } = await client.post(`/rest/api/3/issue/${issueKey}/remotelink`, { object: { url, title } });
+  
+  // 1. Check if the link already exists to avoid duplicates
+  try {
+    const { data: existingLinks } = await client.get(`/rest/api/3/issue/${issueKey}/remotelink`);
+    if (existingLinks.some(link => link.object.url === url)) {
+      console.log(`[Jira] Remote link already exists for ${issueKey}: ${url}`);
+      return { id: 'already-exists' };
+    }
+  } catch (e) {
+    console.warn(`[Jira] Could not verify existing remote links for ${issueKey}`, e.message);
+  }
+
+  // 2. Create if not found
+  const { data } = await withIssueVisibilityRetry(() =>
+    client.post(`/rest/api/3/issue/${issueKey}/remotelink`, { object: { url, title } })
+  );
   return { id: data.id };
 }
 
@@ -197,7 +212,44 @@ export async function uploadAttachmentToJira(issueKey, { filename, buffer }) {
 
 export async function updateIssueDescription(issueKey, descriptionAdf) {
   const client = await jiraClient();
-  await client.put(`/rest/api/3/issue/${issueKey}`, { fields: { description: descriptionAdf } });
+  await withIssueVisibilityRetry(() =>
+    client.put(`/rest/api/3/issue/${issueKey}`, { fields: { description: descriptionAdf } })
+  );
+}
+
+async function withIssueVisibilityRetry(action, attempts = 4) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await action();
+    } catch (error) {
+      lastError = error;
+      if (!isIssueVisibilityError(error) || attempt === attempts) {
+        throw error;
+      }
+      await wait(attempt * 750);
+    }
+  }
+
+  throw lastError;
+}
+
+function isIssueVisibilityError(error) {
+  if (error.response?.status !== 404) return false;
+  const messages = [
+    ...(error.response.data?.errorMessages || []),
+    error.response.data?.message || ''
+  ].join(' ').toLowerCase();
+
+  return messages.includes('issue') ||
+    messages.includes('incidencia') ||
+    messages.includes('permiso') ||
+    messages.includes('permission');
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function toAdf(text, attachmentMap = {}) {

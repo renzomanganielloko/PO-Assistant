@@ -8,6 +8,7 @@ const EMPTY_CREDENTIALS = {
   jiraBaseUrl: '',
   jiraEmail: '',
   jiraApiToken: '',
+  geminiApiKey: '',
   googleTokens: null
 };
 
@@ -28,13 +29,15 @@ export async function getCredentialStatus() {
   return {
     trelloConfigured: Boolean(credentials.trelloApiKey && credentials.trelloToken),
     jiraConfigured: Boolean(credentials.jiraBaseUrl && credentials.jiraEmail && credentials.jiraApiToken),
+    geminiConfigured: Boolean(credentials.geminiApiKey),
     gmailConfigured: Boolean(credentials.googleTokens),
     jiraBaseUrl: credentials.jiraBaseUrl || '',
     diagnostics: {
       trelloApiKey: summarizeKey(credentials.trelloApiKey),
       trelloTokenLength: credentials.trelloToken.length,
       jiraEmail: credentials.jiraEmail,
-      jiraApiTokenLength: credentials.jiraApiToken.length
+      jiraApiTokenLength: credentials.jiraApiToken.length,
+      geminiApiKey: summarizeKey(credentials.geminiApiKey)
     }
   };
 }
@@ -67,7 +70,7 @@ function key() {
   return crypto.createHash('sha256').update(secret).digest();
 }
 
-function normalizeCredentials(credentials) {
+export function normalizeCredentials(credentials) {
   return {
     ...credentials,
     trelloApiKey: compactSecret(credentials.trelloApiKey || ''),
@@ -75,6 +78,7 @@ function normalizeCredentials(credentials) {
     jiraBaseUrl: trimString(credentials.jiraBaseUrl || '').replace(/\/+$/, ''),
     jiraEmail: trimString(credentials.jiraEmail || ''),
     jiraApiToken: compactSecret(credentials.jiraApiToken || ''),
+    geminiApiKey: compactSecret(credentials.geminiApiKey || ''),
     googleTokens: credentials.googleTokens || null
   };
 }
