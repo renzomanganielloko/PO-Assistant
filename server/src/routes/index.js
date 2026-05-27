@@ -303,8 +303,8 @@ apiRouter.get(
 
 apiRouter.get(
   '/automations',
-  asyncHandler(async (_req, res) => {
-    res.json({ automations: await listAutomations() });
+  asyncHandler(async (req, res) => {
+    res.json({ automations: await listAutomations(req.user._id) });
   })
 );
 
@@ -312,7 +312,7 @@ apiRouter.post(
   '/automations',
   asyncHandler(async (req, res) => {
     const automation = automationSchema.parse(req.body);
-    res.status(201).json({ automation: await upsertAutomation(automation) });
+    res.status(201).json({ automation: await upsertAutomation(req.user._id, automation) });
   })
 );
 
@@ -325,7 +325,7 @@ apiRouter.post(
       refineAI: z.boolean().optional()
     }).parse(req.body);
     
-    const automation = await findAutomationByBoardId(boardId);
+    const automation = await findAutomationByBoardId(req.user._id, boardId);
     if (!automation) throw new AppError('No automation configured for this board.', 400);
     
     res.json({ result: await syncSingleCard(cardId, { ...automation, refineAI: refineAI ?? automation.refineAI }) });
@@ -336,7 +336,7 @@ apiRouter.post(
   '/automations/:id/run',
   asyncHandler(async (req, res) => {
     const id = z.string().min(1).parse(req.params.id);
-    const automation = await getAutomation(id);
+    const automation = await getAutomation(req.user._id, id);
     if (!automation) throw new AppError('Automation was not found.', 404);
     res.json({ result: await runBoardAutomation(automation) });
   })
@@ -346,9 +346,11 @@ apiRouter.post(
   '/boards/:boardId/run-automation',
   asyncHandler(async (req, res) => {
     const boardId = z.string().min(1).parse(req.params.boardId);
-    const automation = await findAutomationByBoardId(boardId);
+    const automation = await findAutomationByBoardId(req.user._id, boardId);
     if (!automation) throw new AppError('No automation is configured for this Trello board.', 404);
-    res.json({ result: await runBoardAutomation(automation) });
+    const result = await runBoardAutomation(automation);
+    await updateAutomationRun(req.user._id, automation.id, result);
+    res.json({ result });
   })
 );
 
