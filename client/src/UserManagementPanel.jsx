@@ -127,7 +127,10 @@ export function UserManagementPanel({ language, t }) {
                 background: 'var(--ko-input-bg)',
                 color: 'var(--ko-text)',
                 height: '48px',
-                marginTop: '4px'
+                marginTop: '4px',
+                appearance: 'auto',
+                WebkitAppearance: 'auto',
+                MozAppearance: 'auto'
               }}
             >
               <option value="user">PO</option>
