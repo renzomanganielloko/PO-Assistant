@@ -412,15 +412,13 @@ export function App() {
           <button className={activePage === 'mail' ? 'active' : ''} onClick={() => setActivePage('mail')}>
             <Mail size={18} /> {language === 'es' ? 'Correos' : 'Mail'}
           </button>
+          <button className={activePage === 'settings' ? 'active' : ''} onClick={() => setActivePage('settings')}>
+            <KeyRound size={18} /> {t.nav.settings}
+          </button>
           {user?.role === 'admin' && (
-            <>
-              <button className={activePage === 'settings' ? 'active' : ''} onClick={() => setActivePage('settings')}>
-                <KeyRound size={18} /> {t.nav.settings}
-              </button>
-              <button className={activePage === 'users' ? 'active' : ''} onClick={() => setActivePage('users')}>
-                <Shield size={18} /> {language === 'es' ? 'Usuarios' : 'Users'}
-              </button>
-            </>
+            <button className={activePage === 'users' ? 'active' : ''} onClick={() => setActivePage('users')}>
+              <Shield size={18} /> {language === 'es' ? 'Usuarios' : 'Users'}
+            </button>
           )}
         </nav>
 

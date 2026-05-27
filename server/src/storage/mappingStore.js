@@ -1,39 +1,19 @@
 import mongoose from 'mongoose';
-
-const mappingSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  trelloBoardId: { type: String, required: true },
-  trelloCardId: { type: String, required: true },
-  trelloCardUrl: { type: String },
-  trelloListName: { type: String },
-  jiraProjectKey: { type: String },
-  jiraIssueId: { type: String },
-  jiraIssueKey: { type: String },
-  jiraIssueUrl: { type: String },
-  jiraIssueApiUrl: { type: String }
-}, { timestamps: true });
-
-// Ensure unique mapping per user per card
-mappingSchema.index({ userId: 1, trelloCardId: 1 }, { unique: true });
-
-export const Mapping = mongoose.model('Mapping', mappingSchema);
+import { Mapping } from '../models/Mapping.js';
 
 export async function listMappings(userId) {
-  return await Mapping.find(userId ? { userId } : {});
+  return await Mapping.find({ userId: new mongoose.Types.ObjectId(userId) });
 }
 
 export async function findMappingByTrelloCardId(userId, trelloCardId) {
-  return await Mapping.findOne({ userId, trelloCardId });
+  return await Mapping.findOne({ userId: new mongoose.Types.ObjectId(userId), trelloCardId });
 }
 
 export async function saveMapping(userId, mappingData) {
-  let mapping = await Mapping.findOne({ userId, trelloCardId: mappingData.trelloCardId });
+  const uId = new mongoose.Types.ObjectId(userId);
+  let mapping = await Mapping.findOne({ userId: uId, trelloCardId: mappingData.trelloCardId });
   if (!mapping) {
-    mapping = new Mapping({ userId, ...mappingData });
+    mapping = new Mapping({ userId: uId, ...mappingData });
   } else {
     Object.assign(mapping, mappingData);
   }

@@ -1,8 +1,8 @@
+import mongoose from 'mongoose';
 import { Automation } from '../models/Automation.js';
 
 export async function listAutomations(userId) {
-  const automations = await Automation.find({ userId });
-  // Map _id to id for backwards compatibility with frontend
+  const automations = await Automation.find({ userId: new mongoose.Types.ObjectId(userId) });
   return automations.map(a => {
     const doc = a.toObject();
     doc.id = doc._id.toString();
@@ -11,7 +11,7 @@ export async function listAutomations(userId) {
 }
 
 export async function getAutomation(userId, id) {
-  const a = await Automation.findOne({ _id: id, userId });
+  const a = await Automation.findOne({ _id: new mongoose.Types.ObjectId(id), userId: new mongoose.Types.ObjectId(userId) });
   if (!a) return null;
   const doc = a.toObject();
   doc.id = doc._id.toString();
@@ -19,7 +19,7 @@ export async function getAutomation(userId, id) {
 }
 
 export async function findAutomationByBoardId(userId, trelloBoardId) {
-  const a = await Automation.findOne({ userId, trelloBoardId });
+  const a = await Automation.findOne({ userId: new mongoose.Types.ObjectId(userId), trelloBoardId });
   if (!a) return null;
   const doc = a.toObject();
   doc.id = doc._id.toString();
@@ -27,11 +27,12 @@ export async function findAutomationByBoardId(userId, trelloBoardId) {
 }
 
 export async function upsertAutomation(userId, input) {
-  let automation = await Automation.findOne({ userId, trelloBoardId: input.trelloBoardId });
+  const uId = new mongoose.Types.ObjectId(userId);
+  let automation = await Automation.findOne({ userId: uId, trelloBoardId: input.trelloBoardId });
   
   if (!automation) {
     automation = new Automation({
-      userId,
+      userId: uId,
       ...input,
       jiraProjectKey: (input.jiraProjectKey || '').trim().toUpperCase()
     });
@@ -53,7 +54,7 @@ export async function upsertAutomation(userId, input) {
 }
 
 export async function updateAutomationRun(userId, id, result) {
-  const automation = await Automation.findOne({ _id: id, userId });
+  const automation = await Automation.findOne({ _id: new mongoose.Types.ObjectId(id), userId: new mongoose.Types.ObjectId(userId) });
   if (!automation) return null;
 
   automation.lastRunAt = new Date();

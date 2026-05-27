@@ -11,21 +11,8 @@ const EMPTY_CREDENTIALS = {
   googleTokens: null
 };
 
-// Global Admin Email that owns the master credentials
-const GLOBAL_ADMIN_EMAIL = 'renzo.mg@knownonline.com';
-
-async function getMasterUserId() {
-  const { User } = await import('../models/User.js');
-  const admin = await User.findOne({ email: GLOBAL_ADMIN_EMAIL });
-  return admin ? admin._id.toString() : null;
-}
-
 export async function saveCredentials(userId, nextCredentials) {
-  // We only allow saving to the global admin account
-  const masterId = await getMasterUserId();
-  const targetId = masterId || userId;
-
-  let credentials = await Credentials.findOne({ userId: targetId });
+  let credentials = await Credentials.findOne({ userId });
   
   const currentData = credentials ? decryptData(credentials) : EMPTY_CREDENTIALS;
   const merged = normalizeCredentials({ ...currentData, ...nextCredentials });
@@ -33,7 +20,7 @@ export async function saveCredentials(userId, nextCredentials) {
   const encrypted = encryptData(merged);
   
   if (!credentials) {
-    credentials = new Credentials({ userId: targetId, ...encrypted });
+    credentials = new Credentials({ userId, ...encrypted });
   } else {
     Object.assign(credentials, encrypted);
   }
@@ -42,9 +29,7 @@ export async function saveCredentials(userId, nextCredentials) {
 }
 
 export async function loadCredentials(userId) {
-  // Always try to load the master credentials first
-  const masterId = await getMasterUserId();
-  const credentials = await Credentials.findOne({ userId: masterId || userId });
+  const credentials = await Credentials.findOne({ userId });
   if (!credentials) return EMPTY_CREDENTIALS;
   
   return normalizeCredentials({ ...EMPTY_CREDENTIALS, ...decryptData(credentials) });
