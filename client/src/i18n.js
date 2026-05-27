@@ -128,7 +128,7 @@ export const translations = {
   },
   en: {
     locale: 'en-US',
-    appSubtitle: 'PO workflow control',
+    appSubtitle: 'The Known Online PO Assistant',
     eyebrow: 'PO Assistant',
     nav: {
       settings: 'Settings',

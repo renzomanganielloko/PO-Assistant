@@ -180,7 +180,7 @@ select {
 
 .inputWithIcon input {
   width: 100%;
-  padding: 12px 12px 12px 42px;
+  padding: 12px 12px 12px 48px;
   border: 1.5px solid var(--ko-border);
   border-radius: 12px;
   font-size: 15px;

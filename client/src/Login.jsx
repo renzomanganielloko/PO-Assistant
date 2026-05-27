@@ -18,7 +18,7 @@ export function Login({ onLogin, loading, error }) {
             <img src="/favicon.png" alt="Logo" />
           </div>
           <h1>PO Assistant</h1>
-          <p>Known Online Workflow Control</p>
+          <p>El asistente para POs de Known Online</p>
         </header>
 
         <form onSubmit={handleSubmit} className="loginForm">
