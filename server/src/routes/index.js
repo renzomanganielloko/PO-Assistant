@@ -20,10 +20,34 @@ import { answerAssistantQuestion, assistantQuestions, assistantCategories } from
 
 export const apiRouter = Router();
 
+// Routes that do NOT require authentication
 apiRouter.use('/auth', authRouter);
+apiRouter.get(
+  '/gmail/auth',
+  asyncHandler(async (_req, res) => {
+    res.json({ url: getAuthUrl() });
+  })
+);
+
+apiRouter.get(
+  '/gmail/callback',
+  asyncHandler(async (req, res) => {
+    try {
+      const { code } = req.query;
+      if (typeof code !== 'string') throw new Error('Missing code');
+      await setTokens(code);
+      res.redirect(process.env.CLIENT_ORIGIN || 'http://localhost:5173');
+    } catch (e) {
+      console.error('Callback error:', e);
+      res.status(500).send('Authentication failed');
+    }
+  })
+);
+
+// Apply authentication middleware to all subsequent routes
 apiRouter.use(auth);
 
-// ... existing routes ...
+// ... protected routes ...
 
 apiRouter.post(
   '/gemini/summarize',
@@ -42,22 +66,6 @@ apiRouter.post(
       }
       throw new AppError(error.message, 502);
     }
-  })
-);
-
-apiRouter.get(
-  '/gmail/auth',
-  asyncHandler(async (_req, res) => {
-    res.json({ url: getAuthUrl() });
-  })
-);
-
-apiRouter.get(
-  '/gmail/callback',
-  asyncHandler(async (req, res) => {
-    const { code } = req.query;
-    await setTokens(code);
-    res.send('<script>window.close();</script>');
   })
 );
 
