@@ -143,15 +143,15 @@ export function UserManagementPanel({ language, t }) {
 
       {error && <div className="errorBanner" style={{ marginTop: '20px' }}>{error}</div>}
 
-      <div className="userList">
-        <header className="listHeader">
+      <div className="userList" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <header style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(200px, 2fr) 80px 100px', gap: '10px', padding: '12px 24px', fontSize: '12px', fontWeight: 800, color: 'var(--ko-text-muted)', textTransform: 'uppercase' }}>
           <span>{language === 'es' ? 'Usuario' : 'User'}</span>
           <span>Email</span>
           <span>{language === 'es' ? 'Rol' : 'Role'}</span>
           <span style={{ textAlign: 'right' }}>{language === 'es' ? 'Acciones' : 'Actions'}</span>
         </header>
         {users.map(u => (
-          <div key={u._id} className="userRow" style={{ opacity: u.isActive !== false ? 1 : 0.6 }}>
+          <div key={u._id} className="userRow" style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(200px, 2fr) 80px 100px', gap: '10px', alignItems: 'center', padding: '16px 24px', background: 'var(--ko-bg-card)', border: '1px solid var(--ko-border)', borderRadius: '16px', opacity: u.isActive !== false ? 1 : 0.6 }}>
             <div className="userInfo">
               <div className="userAvatar" style={{ background: u.isActive !== false ? 'var(--ko-orange)' : '#94a3b8' }}>
                 {u.fullName.charAt(0).toUpperCase()}
