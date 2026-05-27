@@ -4,6 +4,7 @@ import { api } from './api.js';
 import { formatMessage, translations } from './i18n.js';
 import { GmailPanel } from './GmailPanel.jsx';
 import { Login } from './Login.jsx';
+import { UserManagementPanel } from './UserManagementPanel.jsx';
 
 const emptySettings = {
   trelloApiKey: '',
@@ -1455,6 +1456,21 @@ function JiraAlertsPage({ alerts, loading, t, language, onRefresh, onMarkAsRead 
             <div className="emptyState">
               <Activity size={48} />
               <p>{t.jiraAlerts.noAlerts}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+v>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+{t.jiraAlerts.noAlerts}</p>
             </div>
           )}
         </div>

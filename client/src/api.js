@@ -41,6 +41,12 @@ export const api = {
     body: JSON.stringify({ email, password })
   }),
   getMe: () => request('/auth/me'),
+  getUsers: () => request('/auth/users'),
+  registerUser: (userData) => request('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(userData)
+  }),
+  deleteUser: (id) => request(`/auth/users/${id}`, { method: 'DELETE' }),
   credentialStatus: () => request('/settings/status'),
   dashboardStats: () => request('/dashboard/stats'),
   saveSettings: (payload) =>

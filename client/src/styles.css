@@ -332,6 +332,124 @@ select {
   color: var(--ko-text);
 }
 
+/* User Management Styles */
+.userManagementPanel {
+  margin-top: 32px;
+}
+
+.userForm {
+  background: var(--ko-bg-header);
+  padding: 24px;
+  border-radius: 16px;
+  margin-bottom: 32px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.userList {
+  display: grid;
+  gap: 8px;
+}
+
+.listHeader {
+  display: grid;
+  grid-template-columns: 1.5fr 2fr 0.8fr 100px;
+  padding: 12px 24px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ko-text-muted);
+  text-transform: uppercase;
+}
+
+.userRow {
+  display: grid;
+  grid-template-columns: 1.5fr 2fr 0.8fr 100px;
+  align-items: center;
+  padding: 16px 24px;
+  background: var(--ko-bg-card);
+  border: 1px solid var(--ko-border);
+  border-radius: 16px;
+  transition: all 0.2s;
+}
+
+.userRow:hover {
+  border-color: var(--ko-orange-pale);
+  transform: translateX(4px);
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.userAvatar {
+  width: 32px;
+  height: 32px;
+  background: var(--ko-orange);
+  color: white;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.roleBadge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.roleBadge.admin { background: rgba(250, 90, 30, 0.1); color: var(--ko-orange); }
+.roleBadge.user { background: var(--ko-secondary-btn); color: var(--ko-text-muted); }
+
+.userActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.deleteBtn {
+  background: transparent;
+  border: 0;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.deleteBtn:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.sidebarProfile {
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebarProfile strong {
+  font-size: 14px;
+  color: white;
+}
+
+.sidebarProfile span {
+  font-size: 12px;
+  color: #94a3b8;
+  word-break: break-all;
+}
+
 .nav button,
 .primary,
 .secondary,

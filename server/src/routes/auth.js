@@ -34,6 +34,30 @@ router.post('/register', auth, admin, async (req, res) => {
   }
 });
 
+// List all users (Admin only)
+router.get('/users', auth, admin, async (req, res) => {
+  try {
+    const users = await User.find({}, 'email fullName role createdAt').sort({ createdAt: -1 });
+    res.json({ users });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete user (Admin only)
+router.delete('/users/:id', auth, admin, async (req, res) => {
+  try {
+    const userToDelete = await User.findById(req.params.id);
+    if (userToDelete.role === 'admin') {
+      return res.status(403).json({ message: 'Cannot delete admin user' });
+    }
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ message: 'User deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get current user profile
 router.get('/me', auth, async (req, res) => {
   res.json({ user: { id: req.user._id, email: req.user.email, fullName: req.user.fullName, role: req.user.role } });
