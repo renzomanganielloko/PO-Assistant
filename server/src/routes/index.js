@@ -149,7 +149,7 @@ apiRouter.post(
       text: z.string().optional().default('')
     }).parse(req.body);
 
-    res.json(await answerAssistantQuestion(query));
+    res.json(await answerAssistantQuestion(req.user._id, query));
   })
 );
 

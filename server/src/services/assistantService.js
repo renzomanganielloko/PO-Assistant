@@ -3,7 +3,7 @@ import { listAutomations } from '../storage/automationStore.js';
 import { fetchCards, fetchLists } from './trelloService.js';
 import { selectSyncCandidates } from './syncRules.js';
 import { getLiveAlerts } from './alertService.js';
-import { getJiraAlerts } from './jiraService.js';
+import { getJiraAlerts, getAssignedIssuesCount } from './jiraService.js';
 import { getUnreadEmailCount } from './gmailService.js';
 
 export const assistantCategories = [
@@ -61,7 +61,7 @@ export const assistantQuestions = [
   { id: 'dark-mode-info', categoryId: 'cat-general', text: '¿El modo oscuro es automático?' }
 ];
 
-export async function answerAssistantQuestion({ questionId, text = '' }) {
+export async function answerAssistantQuestion(userId, { questionId, text = '' }) {
   const matchedId = questionId || inferQuestionId(text);
   
   if (!matchedId) {
@@ -73,50 +73,47 @@ export async function answerAssistantQuestion({ questionId, text = '' }) {
     };
   }
 
-  // Si el texto es muy diferente a la pregunta original pero matcheó por keywords, 
-  // podríamos querer ofrecer sugerencias de todas formas, pero por ahora respondemos.
-
   switch (matchedId) {
     case 'unread-mails':
-      return answerUnreadMails();
+      return answerUnreadMails(userId);
     case 'pending-total':
-      return answerPendingTotal();
+      return answerPendingTotal(userId);
     case 'pending-by-board':
-      return answerPendingByBoard();
+      return answerPendingByBoard(userId);
     case 'favorite-boards':
-      return answerFavoriteBoards();
+      return answerFavoriteBoards(userId);
     case 'active-automations':
-      return answerActiveAutomations();
+      return answerActiveAutomations(userId);
     case 'missing-credentials':
-      return answerMissingCredentials();
+      return answerMissingCredentials(userId);
     case 'gemini-status':
-      return answerBooleanStatus('Gemini IA', 'geminiConfigured');
+      return answerBooleanStatus(userId, 'Gemini IA', 'geminiConfigured');
     case 'gmail-status':
-      return answerBooleanStatus('Gmail', 'gmailConfigured');
+      return answerBooleanStatus(userId, 'Gmail', 'gmailConfigured');
     case 'jira-status':
-      return answerBooleanStatus('Jira', 'jiraConfigured');
+      return answerBooleanStatus(userId, 'Jira', 'jiraConfigured');
     case 'trello-status':
-      return answerBooleanStatus('Trello', 'trelloConfigured');
+      return answerBooleanStatus(userId, 'Trello', 'trelloConfigured');
     case 'last-sync-summary':
-      return answerLastSyncSummary();
+      return answerLastSyncSummary(userId);
     case 'last-sync-errors':
-      return answerLastSyncErrors();
+      return answerLastSyncErrors(userId);
     case 'last-created':
-      return answerLastCreated();
+      return answerLastCreated(userId);
     case 'last-repaired':
-      return answerLastRepaired();
+      return answerLastRepaired(userId);
     case 'refine-ai-boards':
-      return answerRefineAiBoards();
+      return answerRefineAiBoards(userId);
     case 'boards-without-project':
-      return answerBoardsWithoutProject();
+      return answerBoardsWithoutProject(userId);
     case 'jira-alerts':
-      return answerJiraAlerts();
+      return answerJiraAlerts(userId);
     case 'trello-alerts':
-      return answerTrelloAlerts();
+      return answerTrelloAlerts(userId);
     case 'issue-types':
-      return answerIssueTypes();
+      return answerIssueTypes(userId);
     case 'last-run-dates':
-      return answerLastRunDates();
+      return answerLastRunDates(userId);
     case 'trello-setup':
       return { answer: 'Para configurar Trello, necesitás tu API Key y un Token que podés obtener desde el portal de desarrolladores de Atlassian. Luego cargalos en la sección Configuración.', details: [] };
     case 'jira-token-help':
@@ -140,7 +137,7 @@ export async function answerAssistantQuestion({ questionId, text = '' }) {
     case 'trello-visibility':
       return { answer: 'Si no ves un tablero, asegurate de que tu Token de Trello tenga permisos sobre ese Workspace y que el tablero no esté archivado.', details: [] };
     case 'security-info':
-      return { answer: 'Tus tokens se guardan localmente en tu máquina y se encriptan con AES-256 usando una clave secreta que solo vive en tu archivo .env.', details: [] };
+      return { answer: 'Tus tokens se guardan de forma segura en MongoDB Atlas y se encriptan con AES-256 usando una clave maestra.', details: [] };
     case 'about-po-assistant':
       return { answer: 'PO Assistant fue creado para simplificar la vida de los Product Owners que lidian con el caos entre el feedback de clientes (Trello) y el desarrollo (Jira).', details: [] };
     default:
@@ -206,9 +203,9 @@ function normalize(value = '') {
     .trim();
 }
 
-async function answerUnreadMails() {
+async function answerUnreadMails(userId) {
   try {
-    const count = await getUnreadEmailCount('INBOX');
+    const count = await getUnreadEmailCount(userId, 'INBOX');
     return {
       answer: `Tenes ${count} mails sin leer en Recibidos.`,
       details: [`Fuente: Gmail INBOX unread count.`]
@@ -221,16 +218,16 @@ async function answerUnreadMails() {
   }
 }
 
-async function answerPendingTotal() {
-  const pending = await collectPendingCards();
+async function answerPendingTotal(userId) {
+  const pending = await collectPendingCards(userId);
   return {
     answer: `Hay ${pending.total} tareas sin sincronizar en tableros favoritos.`,
     details: pending.byBoard.map(item => `${item.boardName}: ${item.count}`)
   };
 }
 
-async function answerPendingByBoard() {
-  const pending = await collectPendingCards();
+async function answerPendingByBoard(userId) {
+  const pending = await collectPendingCards(userId);
   if (pending.total === 0) {
     return { answer: 'No hay tareas pendientes de sincronizar en tableros favoritos.', details: [] };
   }
@@ -240,8 +237,8 @@ async function answerPendingByBoard() {
   };
 }
 
-async function answerFavoriteBoards() {
-  const automations = await listAutomations();
+async function answerFavoriteBoards(userId) {
+  const automations = await listAutomations(userId);
   const favorites = automations.filter(item => item.favorite);
   return {
     answer: favorites.length
@@ -251,8 +248,8 @@ async function answerFavoriteBoards() {
   };
 }
 
-async function answerActiveAutomations() {
-  const automations = await listAutomations();
+async function answerActiveAutomations(userId) {
+  const automations = await listAutomations(userId);
   const active = automations.filter(item => item.enabled);
   return {
     answer: `Hay ${active.length} automatizacion(es) activas.`,
@@ -260,8 +257,8 @@ async function answerActiveAutomations() {
   };
 }
 
-async function answerMissingCredentials() {
-  const status = await getCredentialStatus();
+async function answerMissingCredentials(userId) {
+  const status = await getCredentialStatus(userId);
   const missing = [
     ['Trello', !status.trelloConfigured],
     ['Jira', !status.jiraConfigured],
@@ -277,16 +274,16 @@ async function answerMissingCredentials() {
   };
 }
 
-async function answerBooleanStatus(label, key) {
-  const status = await getCredentialStatus();
+async function answerBooleanStatus(userId, label, key) {
+  const status = await getCredentialStatus(userId);
   return {
     answer: status[key] ? `${label} esta configurado.` : `${label} no esta configurado.`,
     details: []
   };
 }
 
-async function answerLastSyncSummary() {
-  const latest = await latestAutomationRun();
+async function answerLastSyncSummary(userId) {
+  const latest = await latestAutomationRun(userId);
   if (!latest) return { answer: 'Todavia no hay corridas de automatizacion registradas.', details: [] };
   const result = latest.lastResult || {};
   return {
@@ -300,8 +297,8 @@ async function answerLastSyncSummary() {
   };
 }
 
-async function answerLastSyncErrors() {
-  const latest = await latestAutomationRun();
+async function answerLastSyncErrors(userId) {
+  const latest = await latestAutomationRun(userId);
   const errors = latest?.lastResult?.errors || [];
   return {
     answer: errors.length
@@ -311,8 +308,8 @@ async function answerLastSyncErrors() {
   };
 }
 
-async function answerLastCreated() {
-  const latest = await latestAutomationRun();
+async function answerLastCreated(userId) {
+  const latest = await latestAutomationRun(userId);
   const created = latest?.lastResult?.created || [];
   return {
     answer: created.length
@@ -322,8 +319,8 @@ async function answerLastCreated() {
   };
 }
 
-async function answerLastRepaired() {
-  const latest = await latestAutomationRun();
+async function answerLastRepaired(userId) {
+  const latest = await latestAutomationRun(userId);
   const repaired = latest?.lastResult?.repaired || [];
   return {
     answer: repaired.length
@@ -333,8 +330,8 @@ async function answerLastRepaired() {
   };
 }
 
-async function answerRefineAiBoards() {
-  const automations = await listAutomations();
+async function answerRefineAiBoards(userId) {
+  const automations = await listAutomations(userId);
   const enabled = automations.filter(item => item.refineAI);
   return {
     answer: enabled.length
@@ -344,8 +341,8 @@ async function answerRefineAiBoards() {
   };
 }
 
-async function answerBoardsWithoutProject() {
-  const automations = await listAutomations();
+async function answerBoardsWithoutProject(userId) {
+  const automations = await listAutomations(userId);
   const missing = automations.filter(item => !item.jiraProjectKey);
   return {
     answer: missing.length
@@ -355,9 +352,9 @@ async function answerBoardsWithoutProject() {
   };
 }
 
-async function answerJiraAlerts() {
+async function answerJiraAlerts(userId) {
   try {
-    const alerts = await getJiraAlerts();
+    const alerts = await getJiraAlerts(userId);
     return {
       answer: `Tenes ${alerts.length} alerta(s) de Jira.`,
       details: alerts.slice(0, 6).map(item => `${item.key}: ${item.summary}`)
@@ -367,16 +364,16 @@ async function answerJiraAlerts() {
   }
 }
 
-async function answerTrelloAlerts() {
-  const alerts = await getLiveAlerts();
+async function answerTrelloAlerts(userId) {
+  const alerts = await getLiveAlerts(userId);
   return {
     answer: `Hay ${alerts.length} alerta(s) de Trello.`,
     details: alerts.slice(0, 6).map(item => item.cardName || item.cardId)
   };
 }
 
-async function answerIssueTypes() {
-  const automations = await listAutomations();
+async function answerIssueTypes(userId) {
+  const automations = await listAutomations(userId);
   const counts = automations.reduce((acc, item) => {
     const type = item.jiraIssueType || 'Story';
     acc[type] = (acc[type] || 0) + 1;
@@ -388,8 +385,8 @@ async function answerIssueTypes() {
   };
 }
 
-async function answerLastRunDates() {
-  const automations = await listAutomations();
+async function answerLastRunDates(userId) {
+  const automations = await listAutomations(userId);
   const withRuns = automations.filter(item => item.lastRunAt);
   return {
     answer: withRuns.length
@@ -399,15 +396,15 @@ async function answerLastRunDates() {
   };
 }
 
-async function collectPendingCards() {
-  const automations = await listAutomations();
+async function collectPendingCards(userId) {
+  const automations = await listAutomations(userId);
   const favoriteAutomations = automations.filter(item => item.favorite);
   const byBoard = [];
 
   for (const automation of favoriteAutomations) {
     try {
-      const lists = await fetchLists(automation.trelloBoardId);
-      const cards = await fetchCards(automation.trelloBoardId, automation.trelloListId || undefined);
+      const lists = await fetchLists(userId, automation.trelloBoardId);
+      const cards = await fetchCards(userId, automation.trelloBoardId, automation.trelloListId || undefined);
       const { cardsWithoutJiraLink } = selectSyncCandidates({ cards, lists });
       if (cardsWithoutJiraLink.length) {
         byBoard.push({
@@ -430,8 +427,8 @@ async function collectPendingCards() {
   };
 }
 
-async function latestAutomationRun() {
-  const automations = await listAutomations();
+async function latestAutomationRun(userId) {
+  const automations = await listAutomations(userId);
   return automations
     .filter(item => item.lastRunAt)
     .sort((a, b) => new Date(b.lastRunAt) - new Date(a.lastRunAt))[0] || null;
