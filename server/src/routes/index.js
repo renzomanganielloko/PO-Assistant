@@ -11,12 +11,17 @@ import { getLiveAlerts, addComment } from '../services/alertService.js';
 import { markAsRead } from '../storage/readAlertsStore.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { authRouter } from './auth.js';
+import { auth } from '../middleware/auth.js';
 
 import { getAuthUrl, setTokens, fetchEmails, summarizeEmail, fetchLabels } from '../services/gmailService.js';
 import { summarizeText } from '../services/geminiService.js';
 import { answerAssistantQuestion, assistantQuestions, assistantCategories } from '../services/assistantService.js';
 
 export const apiRouter = Router();
+
+apiRouter.use('/auth', authRouter);
+apiRouter.use(auth);
 
 // ... existing routes ...
 

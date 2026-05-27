@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { apiRouter } from './routes/index.js';
+import { connectDB } from './db.js';
 import { ensureDataDir } from './storage/fileStore.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -38,17 +39,25 @@ app.use(morgan('dev'));
 app.use('/api', apiRouter); 
 app.use(errorHandler);
 
-// Initialize data directory and start listening
-ensureDataDir().then(() => {
-  app.listen(port, () => {
-    console.log(`API listening on http://localhost:${port}`);
-  }).on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`Port ${port} is already in use. Please check if another instance is running.`);
-    } else {
-      console.error('Server failed to start:', err);
-    }
-  });
-}).catch(err => {
-  console.error('Failed to initialize data directory:', err);
-});
+// Initialize and start listening
+async function init() {
+  try {
+    await connectDB();
+    await ensureDataDir();
+
+    app.listen(port, () => {
+      console.log(`API listening on http://localhost:${port}`);
+    }).on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${port} is already in use.`);
+      } else {
+        console.error('Server failed to start:', err);
+      }
+    });
+  } catch (error) {
+    console.error('Initialization failed:', error);
+    process.exit(1);
+  }
+}
+
+init();

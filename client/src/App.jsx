@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { AlertCircle, Bot, CheckCircle2, ClipboardList, KeyRound, ListChecks, Play, RefreshCw, Save, Star, Moon, Sun, Bell, MessageSquare, ArrowRightLeft, PlusCircle, ExternalLink, Send, Search, User, X, Activity, List, ListOrdered, Bold, Image as ImageIcon, Mail, Minus } from 'lucide-react';
+import { AlertCircle, Bot, CheckCircle2, ClipboardList, KeyRound, ListChecks, Play, RefreshCw, Save, Star, Moon, Sun, Bell, MessageSquare, ArrowRightLeft, PlusCircle, ExternalLink, Send, Search, User, X, Activity, List, ListOrdered, Bold, Image as ImageIcon, Mail, Minus, LogOut } from 'lucide-react';
 import { api } from './api.js';
 import { formatMessage, translations } from './i18n.js';
 import { GmailPanel } from './GmailPanel.jsx';
+import { Login } from './Login.jsx';
 
 const emptySettings = {
   trelloApiKey: '',
@@ -42,6 +43,8 @@ function mergeAutomationDrafts(current, boards) {
 }
 
 export function App() {
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || 'null'));
+  const [token, setToken] = useState(() => localStorage.getItem('token') || null);
   const [language, setLanguage] = useState(() => localStorage.getItem('language') || 'es');
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
   const [activePage, setActivePage] = useState('boards');
@@ -79,8 +82,28 @@ export function App() {
   }, [theme]);
 
   useEffect(() => {
-    refreshStatus();
-  }, []);
+    if (token) {
+      refreshStatus();
+    }
+  }, [token]);
+
+  async function handleLogin(email, password) {
+    const result = await run('login', () => api.login(email, password));
+    if (result?.token) {
+      localStorage.setItem('token', result.token);
+      localStorage.setItem('user', JSON.stringify(result.user));
+      setToken(result.token);
+      setUser(result.user);
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setToken(null);
+    setUser(null);
+    window.location.reload();
+  }
 
   async function loadAlerts() {
     const result = await run('alerts', () => api.getAlerts());
@@ -110,6 +133,7 @@ export function App() {
   }
 
   useEffect(() => {
+    if (!token) return;
     if (activePage === 'alerts') {
       loadAlerts();
     }
@@ -119,7 +143,7 @@ export function App() {
     if (activePage === 'sync') {
       loadPendingCards();
     }
-  }, [activePage]);
+  }, [activePage, token]);
 
   const selectedBoard = useMemo(
     () => boards.find((board) => board.id === selectedBoardId),
@@ -349,6 +373,10 @@ export function App() {
     };
   }
 
+  if (!token) {
+    return <Login onLogin={handleLogin} loading={loading === 'login'} error={error} />;
+  }
+
   return (
     <div className="appShell">
       <aside className="sidebar">
@@ -382,18 +410,27 @@ export function App() {
           <button className={activePage === 'mail' ? 'active' : ''} onClick={() => setActivePage('mail')}>
             <Mail size={18} /> {language === 'es' ? 'Correos' : 'Mail'}
           </button>
-          <button className={activePage === 'settings' ? 'active' : ''} onClick={() => setActivePage('settings')}>
-            <KeyRound size={18} /> {t.nav.settings}
-          </button>
+          {user?.role === 'admin' && (
+            <button className={activePage === 'settings' ? 'active' : ''} onClick={() => setActivePage('settings')}>
+              <KeyRound size={18} /> {t.nav.settings}
+            </button>
+          )}
         </nav>
 
-        <div className="languageControl" aria-label={t.language.label}>
-          <span>{t.language.label}</span>
-          <button className={language === 'es' ? 'active' : ''} onClick={() => setLanguage('es')}>
-            {t.language.es}
-          </button>
-          <button className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')}>
-            {t.language.en}
+        <div className="sidebarFooter">
+          <div className="languageControl" aria-label={t.language.label}>
+            <span>{t.language.label}</span>
+            <button className={language === 'es' ? 'active' : ''} onClick={() => setLanguage('es')}>
+              {t.language.es}
+            </button>
+            <button className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')}>
+              {t.language.en}
+            </button>
+          </div>
+          
+          <button className="logoutButton" onClick={handleLogout}>
+            <LogOut size={18} />
+            <span>Cerrar Sesión</span>
           </button>
         </div>
       </aside>
@@ -402,7 +439,12 @@ export function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">{t.eyebrow} / {t.nav[activePage]}</p>
-            <h2>{t.nav[activePage]}</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <h2>{t.nav[activePage]}</h2>
+              <span className="userBadge">
+                <User size={14} /> {user?.fullName}
+              </span>
+            </div>
           </div>
           <div className="topbarControls">
             <button 
@@ -417,7 +459,7 @@ export function App() {
 
         {error && <div className="errorBanner">{error}</div>}
 
-        {activePage === 'settings' && (
+        {activePage === 'settings' && user?.role === 'admin' && (
           <section className="panel">
             <form className="settingsGrid" onSubmit={saveSettings}>
               <Field label={t.settings.trelloApiKey} status={credentialFieldStatus('trelloApiKey')} type="password" value={settings.trelloApiKey} onChange={(trelloApiKey) => setSettings({ ...settings, trelloApiKey })} />
@@ -426,7 +468,8 @@ export function App() {
               <Field label={t.settings.jiraEmail} status={credentialFieldStatus('jiraEmail')} value={settings.jiraEmail} onChange={(jiraEmail) => setSettings({ ...settings, jiraEmail })} />
               <Field label={t.settings.jiraApiToken} status={credentialFieldStatus('jiraApiToken')} type="password" value={settings.jiraApiToken} onChange={(jiraApiToken) => setSettings({ ...settings, jiraApiToken })} />
               <Field label={t.settings.geminiApiKey} status={credentialFieldStatus('geminiApiKey')} type="password" value={settings.geminiApiKey} onChange={(geminiApiKey) => setSettings({ ...settings, geminiApiKey })} />
-              <div className="actions">                <button className="primary" disabled={loading === 'settings'}>
+              <div className="actions">
+                <button className="primary" disabled={loading === 'settings'}>
                   <CheckCircle2 size={18} /> {t.settings.save}
                 </button>
                 <button type="button" className="secondary" onClick={loadBoards} disabled={!status?.trelloConfigured || loading === 'boards'}>
