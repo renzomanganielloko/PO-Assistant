@@ -412,13 +412,23 @@ export function App() {
             <Mail size={18} /> {language === 'es' ? 'Correos' : 'Mail'}
           </button>
           {user?.role === 'admin' && (
-            <button className={activePage === 'settings' ? 'active' : ''} onClick={() => setActivePage('settings')}>
-              <KeyRound size={18} /> {t.nav.settings}
-            </button>
+            <>
+              <button className={activePage === 'settings' ? 'active' : ''} onClick={() => setActivePage('settings')}>
+                <KeyRound size={18} /> {t.nav.settings}
+              </button>
+              <button className={activePage === 'users' ? 'active' : ''} onClick={() => setActivePage('users')}>
+                <User size={18} /> {language === 'es' ? 'Usuarios' : 'Users'}
+              </button>
+            </>
           )}
         </nav>
 
         <div className="sidebarFooter">
+          <div className="sidebarProfile">
+            <strong>{user?.fullName}</strong>
+            <span>{user?.email}</span>
+          </div>
+
           <div className="languageControl" aria-label={t.language.label}>
             <span>{t.language.label}</span>
             <button className={language === 'es' ? 'active' : ''} onClick={() => setLanguage('es')}>
@@ -442,9 +452,6 @@ export function App() {
             <p className="eyebrow">{t.eyebrow} / {t.nav[activePage]}</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <h2>{t.nav[activePage]}</h2>
-              <span className="userBadge">
-                <User size={14} /> {user?.fullName}
-              </span>
             </div>
           </div>
           <div className="topbarControls">
@@ -482,6 +489,10 @@ export function App() {
               </div>
             </form>
           </section>
+        )}
+
+        {activePage === 'users' && user?.role === 'admin' && (
+          <UserManagementPanel language={language} t={t} />
         )}
 
         {activePage === 'boards' && (
