@@ -216,7 +216,7 @@ apiRouter.post(
     const cardId = z.string().min(1).parse(req.params.cardId);
     const { attachment } = z.object({ attachment: z.string().min(1) }).parse(req.body);
     const buffer = Buffer.from(attachment.split(',')[1], 'base64');
-    const result = await uploadFileToCard(cardId, { filename: `img_${Date.now()}.png`, buffer });
+    const result = await uploadFileToCard(req.user._id, cardId, { filename: `img_${Date.now()}.png`, buffer });
     res.json({ url: result.url, name: result.name });
   })
 );
@@ -231,7 +231,7 @@ apiRouter.get(
       })
       .parse(req.query);
 
-    res.json({ cards: await fetchCards(query.boardId, query.listId) });
+    res.json({ cards: await fetchCards(req.user._id, query.boardId, query.listId) });
   })
 );
 
@@ -245,8 +245,8 @@ apiRouter.post(
       })
       .parse(req.body);
 
-    const lists = await fetchLists(body.boardId);
-    const cards = await fetchCards(body.boardId, body.listId);
+    const lists = await fetchLists(req.user._id, body.boardId);
+    const cards = await fetchCards(req.user._id, body.boardId, body.listId);
     const { sprintCards, cardsWithoutJiraLink, eligibleCards } = selectSyncCandidates({
       cards,
       lists
