@@ -17,7 +17,7 @@ const GLOBAL_ADMIN_EMAIL = 'renzo.mg@knownonline.com';
 async function getMasterUserId() {
   const { User } = await import('../models/User.js');
   const admin = await User.findOne({ email: GLOBAL_ADMIN_EMAIL });
-  return admin?._id;
+  return admin ? admin._id.toString() : null;
 }
 
 export async function saveCredentials(userId, nextCredentials) {
