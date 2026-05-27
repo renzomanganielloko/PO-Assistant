@@ -47,6 +47,7 @@ export const api = {
     body: JSON.stringify(userData)
   }),
   deleteUser: (id) => request(`/auth/users/${id}`, { method: 'DELETE' }),
+  toggleUserStatus: (id) => request(`/auth/users/${id}/toggle`, { method: 'PUT' }),
   changePassword: (currentPassword, newPassword) => request('/auth/password', {
     method: 'PUT',
     body: JSON.stringify({ currentPassword, newPassword })

@@ -412,9 +412,6 @@ export function App() {
           <button className={activePage === 'mail' ? 'active' : ''} onClick={() => setActivePage('mail')}>
             <Mail size={18} /> {language === 'es' ? 'Correos' : 'Mail'}
           </button>
-          <button className={activePage === 'profile' ? 'active' : ''} onClick={() => setActivePage('profile')}>
-            <User size={18} /> {language === 'es' ? 'Mi Perfil' : 'My Profile'}
-          </button>
           {user?.role === 'admin' && (
             <>
               <button className={activePage === 'settings' ? 'active' : ''} onClick={() => setActivePage('settings')}>
@@ -443,6 +440,14 @@ export function App() {
             </button>
           </div>
           
+          <button 
+            className={`profileButton ${activePage === 'profile' ? 'active' : ''}`} 
+            onClick={() => setActivePage('profile')}
+          >
+            <User size={18} />
+            <span>{language === 'es' ? 'Mi Perfil' : 'My Profile'}</span>
+          </button>
+
           <button className="logoutButton" onClick={handleLogout}>
             <LogOut size={18} />
             <span>Cerrar Sesión</span>

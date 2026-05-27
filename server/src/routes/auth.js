@@ -26,6 +26,10 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Credenciales inválidas. Verifica tu correo y contraseña.' });
     }
 
+    if (user.isActive === false) {
+      return res.status(403).json({ message: 'Tu cuenta ha sido pausada. Contacta al administrador.' });
+    }
+
     const isMatch = await user.comparePassword(password);
     console.log(`Password match result: ${isMatch}`);
 
@@ -58,10 +62,28 @@ router.post('/register', auth, admin, async (req, res) => {
 // List all users (Admin only)
 router.get('/users', auth, admin, async (req, res) => {
   try {
-    const users = await User.find({}, 'email fullName role createdAt').sort({ createdAt: -1 });
+    const users = await User.find({}, 'email fullName role isActive createdAt').sort({ createdAt: -1 });
     res.json({ users });
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener usuarios.' });
+  }
+});
+
+// Toggle user status (Admin only)
+router.put('/users/:id/toggle', auth, admin, async (req, res) => {
+  try {
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) return res.status(404).json({ message: 'Usuario no encontrado.' });
+    if (targetUser.role === 'admin') {
+      return res.status(403).json({ message: 'No se puede pausar a un administrador.' });
+    }
+    
+    targetUser.isActive = !targetUser.isActive;
+    await targetUser.save();
+    
+    res.json({ message: 'Estado del usuario actualizado.', isActive: targetUser.isActive });
+  } catch (error) {
+    res.status(500).json({ message: 'Error al actualizar el estado del usuario.' });
   }
 });
 

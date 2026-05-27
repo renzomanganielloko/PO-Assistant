@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Trash2, Shield, User, Loader2, Mail, Lock, UserCircle } from 'lucide-react';
+import { UserPlus, Trash2, Shield, User, Loader2, Mail, Lock, UserCircle, Pause, Play } from 'lucide-react';
 import { api } from './api.js';
 
 export function UserManagementPanel({ language, t }) {
@@ -52,6 +52,18 @@ export function UserManagementPanel({ language, t }) {
     }
   }
 
+  async function handleToggleStatus(id) {
+    setLoading(true);
+    try {
+      await api.toggleUserStatus(id);
+      await loadUsers();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <section className="panel userManagementPanel">
       <div className="panelHeader">
@@ -60,7 +72,7 @@ export function UserManagementPanel({ language, t }) {
       </div>
 
       <form onSubmit={handleCreateUser} className="userForm">
-        <div className="formGrid">
+        <div className="formGrid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
           <label className="field">
             <span>{language === 'es' ? 'Nombre Completo' : 'Full Name'}</span>
             <div className="inputWithIcon">
@@ -100,6 +112,28 @@ export function UserManagementPanel({ language, t }) {
               />
             </div>
           </label>
+          <label className="field">
+            <span>{language === 'es' ? 'Rol' : 'Role'}</span>
+            <select 
+              value={form.role} 
+              onChange={e => setForm({...form, role: e.target.value})}
+              style={{
+                width: '100%',
+                padding: '12px 12px 12px 16px',
+                border: '1.5px solid var(--ko-border)',
+                borderRadius: '12px',
+                fontSize: '14px',
+                background: 'var(--ko-input-bg)',
+                color: 'var(--ko-text)',
+                height: '48px',
+                marginTop: '4px',
+                outline: 'none'
+              }}
+            >
+              <option value="user">PO</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
         </div>
         <button type="submit" className="primary" disabled={loading}>
           {loading ? <Loader2 size={18} className="spin" /> : <UserPlus size={18} />}
@@ -117,18 +151,28 @@ export function UserManagementPanel({ language, t }) {
           <span style={{ textAlign: 'right' }}>{language === 'es' ? 'Acciones' : 'Actions'}</span>
         </header>
         {users.map(u => (
-          <div key={u._id} className="userRow">
+          <div key={u._id} className="userRow" style={{ opacity: u.isActive !== false ? 1 : 0.6 }}>
             <div className="userInfo">
-              <div className="userAvatar">{u.fullName.charAt(0).toUpperCase()}</div>
-              <strong>{u.fullName}</strong>
+              <div className="userAvatar" style={{ background: u.isActive !== false ? 'var(--ko-orange)' : '#94a3b8' }}>
+                {u.fullName.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <strong>{u.fullName}</strong>
+                {u.isActive === false && <span style={{display: 'block', fontSize: '11px', color: '#ef4444', fontWeight: 700}}>PAUSADO</span>}
+              </div>
             </div>
             <span>{u.email}</span>
             <span className={`roleBadge ${u.role}`}>{u.role === 'user' ? 'PO' : 'Admin'}</span>
-            <div className="userActions">
+            <div className="userActions" style={{ gap: '8px' }}>
               {u.role !== 'admin' && (
-                <button onClick={() => handleDeleteUser(u._id)} className="deleteBtn" title="Eliminar">
-                  <Trash2 size={16} />
-                </button>
+                <>
+                  <button onClick={() => handleToggleStatus(u._id)} className="pauseBtn" title={u.isActive !== false ? 'Pausar' : 'Activar'}>
+                    {u.isActive !== false ? <Pause size={16} /> : <Play size={16} />}
+                  </button>
+                  <button onClick={() => handleDeleteUser(u._id)} className="deleteBtn" title="Eliminar">
+                    <Trash2 size={16} />
+                  </button>
+                </>
               )}
             </div>
           </div>
