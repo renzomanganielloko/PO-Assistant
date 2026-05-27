@@ -478,7 +478,7 @@ export function App() {
           <ProfilePanel user={user} language={language} />
         )}
 
-        {activePage === 'settings' && user?.role === 'admin' && (
+        {activePage === 'settings' && (
           <section className="panel">
             <form className="settingsGrid" onSubmit={saveSettings}>
               <Field label={t.settings.trelloApiKey} status={credentialFieldStatus('trelloApiKey')} type="password" value={settings.trelloApiKey} onChange={(trelloApiKey) => setSettings({ ...settings, trelloApiKey })} />
