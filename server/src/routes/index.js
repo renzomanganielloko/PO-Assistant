@@ -23,19 +23,14 @@ export const apiRouter = Router();
 // Routes that do NOT require authentication
 apiRouter.use('/auth', authRouter);
 apiRouter.get(
-  '/gmail/auth',
-  asyncHandler(async (_req, res) => {
-    res.json({ url: getAuthUrl() });
-  })
-);
-
-apiRouter.get(
   '/gmail/callback',
   asyncHandler(async (req, res) => {
     try {
-      const { code } = req.query;
+      const { code, state: userId } = req.query;
       if (typeof code !== 'string') throw new Error('Missing code');
-      await setTokens(code);
+      if (!userId) throw new Error('Missing user state');
+      
+      await setTokens(userId, code);
       res.redirect(process.env.CLIENT_ORIGIN || 'http://localhost:5173');
     } catch (e) {
       console.error('Callback error:', e);
@@ -46,6 +41,13 @@ apiRouter.get(
 
 // Apply authentication middleware to all subsequent routes
 apiRouter.use(auth);
+
+apiRouter.get(
+  '/gmail/auth',
+  asyncHandler(async (req, res) => {
+    res.json({ url: getAuthUrl(req.user._id.toString()) });
+  })
+);
 
 // ... protected routes ...
 

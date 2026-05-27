@@ -5,19 +5,23 @@ import { generateGeminiText } from './geminiService.js';
 const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 
 export function getOAuth2Client() {
+  const redirectUri = process.env.REDIRECT_URI || 'http://localhost:4000/api/gmail/callback';
+  console.log(`[Gmail] Initializing OAuth2 with redirect: ${redirectUri}`);
+  
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    process.env.REDIRECT_URI
+    redirectUri
   );
 }
 
-export function getAuthUrl() {
+export function getAuthUrl(userId) {
   const oauth2Client = getOAuth2Client();
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: SCOPES,
-    prompt: 'consent'
+    prompt: 'consent',
+    state: userId
   });
 }
 
