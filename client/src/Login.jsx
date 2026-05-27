@@ -66,7 +66,7 @@ export function Login({ onLogin, loading, error }) {
         </form>
 
         <footer className="loginFooter">
-          <p>&copy; 2024 Known Online. Todos los derechos reservados.</p>
+          <p>&copy; 2026 Known Online. Todos los derechos reservados.</p>
         </footer>
       </div>
     </div>
