@@ -155,8 +155,8 @@ apiRouter.post(
 
 apiRouter.get(
   '/settings/status',
-  asyncHandler(async (_req, res) => {
-    res.json(await getCredentialStatus());
+  asyncHandler(async (req, res) => {
+    res.json(await getCredentialStatus(req.user._id));
   })
 );
 
@@ -164,7 +164,7 @@ apiRouter.post(
   '/settings',
   asyncHandler(async (req, res) => {
     const credentials = credentialsSchema.parse(req.body);
-    await saveCredentials(credentials);
+    await saveCredentials(req.user._id, credentials);
     res.status(204).send();
   })
 );
