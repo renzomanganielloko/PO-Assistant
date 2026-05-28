@@ -5,7 +5,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 
 export const auth = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    const token = req.header('Authorization')?.replace('Bearer ', '') || req.query.token;
     
     if (!token) {
       throw new Error();

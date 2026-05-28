@@ -2061,7 +2061,10 @@ function JiraCommentReplyModal({ issue, mode, language, onClose, onRefresh, t })
               <div 
                 className="fullCommentHtml"
                 dangerouslySetInnerHTML={{ 
-                  __html: (issue.commentHtml || `<p>${issue.commentText}</p>`).replace(/\/api\/jira\/attachment\//g, `${api.API_BASE}/jira/attachment/`)
+                  __html: (issue.commentHtml || `<p>${issue.commentText}</p>`).replace(/\/api\/jira\/attachment\/([^\s"'?<>]+)/g, (match, id) => {
+                    const token = localStorage.getItem('token') || '';
+                    return `${api.API_BASE}/jira/attachment/${id}?token=${token}`;
+                  })
                 }}
                 style={{
                   fontSize: '14px',
