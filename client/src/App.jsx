@@ -1794,7 +1794,7 @@ function JiraTicketCard({ issue, t, language, onRefresh, onOpenComment }) {
           title={language === 'es' ? 'Ver comentario completo' : 'View full comment'}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-            <strong style={{ fontSize: '11.5px', color: 'var(--ko-orange)' }}>{issue.author}</strong>
+            <strong style={{ fontSize: '11.5px', color: 'var(--ko-orange)' }}>{issue.commentAuthor || issue.author}</strong>
             <span style={{ fontSize: '10px', color: 'var(--ko-text-muted)' }}>{language === 'es' ? 'comentó:' : 'commented:'}</span>
           </div>
           <div style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
@@ -2046,10 +2046,10 @@ function JiraCommentReplyModal({ issue, mode, language, onClose, onRefresh, t })
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', borderBottom: '1px solid var(--ko-border)', paddingBottom: '12px' }}>
                 <div className="userAvatar" style={{ width: '32px', height: '32px', fontSize: '13px' }}>
-                  {(issue.author || 'S').charAt(0).toUpperCase()}
+                  {(issue.commentAuthor || issue.author || 'S').charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <strong style={{ fontSize: '14px' }}>{issue.author || 'Sistema'}</strong>
+                  <strong style={{ fontSize: '14px' }}>{issue.commentAuthor || issue.author || 'Sistema'}</strong>
                   {issue.updated && (
                     <div style={{ fontSize: '11px', color: 'var(--ko-text-muted)', marginTop: '2px' }}>
                       {new Date(issue.updated).toLocaleString(language === 'es' ? 'es-AR' : 'en-US')}
@@ -2060,7 +2060,9 @@ function JiraCommentReplyModal({ issue, mode, language, onClose, onRefresh, t })
               
               <div 
                 className="fullCommentHtml"
-                dangerouslySetInnerHTML={{ __html: issue.commentHtml || `<p>${issue.commentText}</p>` }}
+                dangerouslySetInnerHTML={{ 
+                  __html: (issue.commentHtml || `<p>${issue.commentText}</p>`).replace(/\/api\/jira\/attachment\//g, `${api.API_BASE}/jira/attachment/`)
+                }}
                 style={{
                   fontSize: '14px',
                   lineHeight: '1.6',

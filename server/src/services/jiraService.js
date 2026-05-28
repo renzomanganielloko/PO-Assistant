@@ -206,6 +206,8 @@ export async function getJiraAlerts(userId) {
         }
       }
 
+      const displayedComment = mentionActivity || lastComment;
+
       return {
         id: issue.id, 
         key: issue.key, 
@@ -218,8 +220,10 @@ export async function getJiraAlerts(userId) {
         author: rel?.author?.displayName || 'Sistema', 
         authorId: rel?.author?.accountId,
         actionType, 
-        commentText: commentText || (lastComment ? lastComment.text : ''),
-        commentHtml: rel?.type === 'comment' ? rel.html : (lastComment ? lastComment.html : ''),
+        commentAuthor: displayedComment?.author?.displayName || 'Sistema',
+        commentAuthorId: displayedComment?.author?.accountId,
+        commentText: displayedComment ? displayedComment.text : '',
+        commentHtml: displayedComment ? displayedComment.html : '',
         isAssignee: fields.assignee?.accountId === myAccountId,
         assigneeName: fields.assignee?.displayName,
         assigneeId: fields.assignee?.accountId,
@@ -457,10 +461,21 @@ export async function uploadAttachmentToJira(userId, issueKey, { filename, buffe
 
 export async function downloadJiraAttachmentStream(userId, attachmentId) {
   const client = await jiraClient(userId);
-  const { data, headers } = await client.get(`/rest/api/3/attachment/content/${attachmentId}`, {
-    responseType: 'stream'
+  const response = await client.get(`/rest/api/3/attachment/content/${attachmentId}`, {
+    maxRedirects: 0,
+    validateStatus: (status) => status >= 200 && status < 400
   });
-  return { data, headers };
+
+  if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
+    const redirectUrl = response.headers.location;
+    const fileResponse = await axios.get(redirectUrl, {
+      responseType: 'stream',
+      timeout: 30000
+    });
+    return { data: fileResponse.data, headers: fileResponse.headers };
+  }
+
+  return { data: response.data, headers: response.headers };
 }
 
 export async function updateIssueDescription(userId, issueKey, descriptionAdf) {

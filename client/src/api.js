@@ -36,6 +36,7 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  API_BASE,
   login: (email, password) => request('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password })
