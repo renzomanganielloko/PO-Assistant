@@ -309,19 +309,19 @@ function extractTextFromAdf(adf) {
   return text.trim();
 }
 
-function convertAdfToHtml(node, attachments = []) {
+function convertAdfToHtml(node, attachments = [], state = { mediaIndex: 0 }) {
   if (!node) return '';
   
   if (Array.isArray(node)) {
-    return node.map(n => convertAdfToHtml(n, attachments)).join('');
+    return node.map(n => convertAdfToHtml(n, attachments, state)).join('');
   }
   
   switch (node.type) {
     case 'doc':
-      return convertAdfToHtml(node.content, attachments);
+      return convertAdfToHtml(node.content, attachments, state);
       
     case 'paragraph':
-      return `<p>${convertAdfToHtml(node.content, attachments)}</p>`;
+      return `<p>${convertAdfToHtml(node.content, attachments, state)}</p>`;
       
     case 'text': {
       let text = escapeHtml(node.text);
@@ -343,13 +343,13 @@ function convertAdfToHtml(node, attachments = []) {
       return '<br />';
       
     case 'bulletList':
-      return `<ul>${convertAdfToHtml(node.content, attachments)}</ul>`;
+      return `<ul>${convertAdfToHtml(node.content, attachments, state)}</ul>`;
       
     case 'orderedList':
-      return `<ol>${convertAdfToHtml(node.content, attachments)}</ol>`;
+      return `<ol>${convertAdfToHtml(node.content, attachments, state)}</ol>`;
       
     case 'listItem':
-      return `<li>${convertAdfToHtml(node.content, attachments)}</li>`;
+      return `<li>${convertAdfToHtml(node.content, attachments, state)}</li>`;
       
     case 'mention': {
       const displayName = node.attrs.text || `@Usuario`;
@@ -357,20 +357,34 @@ function convertAdfToHtml(node, attachments = []) {
     }
     
     case 'mediaSingle':
-      return `<div class="mediaSingle" style="text-align: center; margin: 12px 0;">${convertAdfToHtml(node.content, attachments)}</div>`;
+      return `<div class="mediaSingle" style="text-align: center; margin: 12px 0;">${convertAdfToHtml(node.content, attachments, state)}</div>`;
       
     case 'media': {
-      const attachmentId = node.attrs.id;
-      const att = attachments.find(a => a.id === attachmentId);
-      if (att && att.content) {
-        return `<img src="${att.content}" alt="${escapeHtml(att.filename || 'Image')}" style="max-width: 100%; border-radius: 8px; display: block; margin: 0 auto; border: 1px solid var(--ko-border);" />`;
+      const isImage = (a) => {
+        const mime = (a.mimeType || '').toLowerCase();
+        const filename = (a.filename || '').toLowerCase();
+        return mime.startsWith('image/') || 
+               filename.endsWith('.png') || 
+               filename.endsWith('.jpg') || 
+               filename.endsWith('.jpeg') || 
+               filename.endsWith('.gif') || 
+               filename.endsWith('.webp');
+      };
+      
+      const imageAttachments = attachments.filter(isImage);
+      const currentIndex = state.mediaIndex;
+      state.mediaIndex += 1;
+      
+      const att = imageAttachments[currentIndex] || attachments[currentIndex];
+      if (att && att.id) {
+        return `<img src="/api/jira/attachment/${att.id}" alt="${escapeHtml(att.filename || 'Image')}" style="max-width: 100%; border-radius: 8px; display: block; margin: 0 auto; border: 1px solid var(--ko-border);" />`;
       }
       return `<span style="font-size: 11px; color: var(--ko-text-muted);">📸 [Imagen adjunta: ${escapeHtml(node.attrs.collection || 'Adjunto')}]</span>`;
     }
     
     default:
       if (node.content) {
-        return convertAdfToHtml(node.content, attachments);
+        return convertAdfToHtml(node.content, attachments, state);
       }
       return '';
   }
@@ -439,6 +453,14 @@ export async function uploadAttachmentToJira(userId, issueKey, { filename, buffe
   form.append('file', buffer, filename);
   const { data } = await client.post(`/rest/api/3/issue/${issueKey}/attachments`, form, { headers: { ...form.getHeaders() } });
   return data;
+}
+
+export async function downloadJiraAttachmentStream(userId, attachmentId) {
+  const client = await jiraClient(userId);
+  const { data, headers } = await client.get(`/rest/api/3/attachment/content/${attachmentId}`, {
+    responseType: 'stream'
+  });
+  return { data, headers };
 }
 
 export async function updateIssueDescription(userId, issueKey, descriptionAdf) {

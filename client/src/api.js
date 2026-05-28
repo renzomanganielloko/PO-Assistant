@@ -102,6 +102,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ text })
     }),
+  uploadJiraImage: (key, attachment) =>
+    request(`/jira/issue/${encodeURIComponent(key)}/upload`, {
+      method: 'POST',
+      body: JSON.stringify({ attachment })
+    }),
   jiraAddLink: (key, { title, url }) =>
     request(`/jira/issue/${encodeURIComponent(key)}/link`, {
       method: 'POST',

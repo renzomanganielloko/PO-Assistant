@@ -59,6 +59,7 @@ export function App() {
   const [automationDrafts, setAutomationDrafts] = useState({});
   const [automationReports, setAutomationReports] = useState({});
   const [showReportBoardId, setShowReportBoardId] = useState(null);
+  const [activeJiraIssueModal, setActiveJiraIssueModal] = useState(null);
   const [selectedBoardId, setSelectedBoardId] = useState('');
   const [selectedListId, setSelectedListId] = useState('');
   const [pendingRefineAI, setPendingRefineAI] = useState(false);
@@ -697,6 +698,7 @@ export function App() {
             language={language}
             onRefresh={loadJiraAlerts} 
             onMarkAsRead={markJiraAlertAsRead}
+            onOpenComment={(issue, mode) => setActiveJiraIssueModal({ issue, mode })}
           />
         )}
 
@@ -729,6 +731,16 @@ export function App() {
             </div>
           </div>
         </div>
+      )}
+      {activeJiraIssueModal && (
+        <JiraCommentReplyModal
+          issue={activeJiraIssueModal.issue}
+          mode={activeJiraIssueModal.mode}
+          language={language}
+          t={t}
+          onClose={() => setActiveJiraIssueModal(null)}
+          onRefresh={loadJiraAlerts}
+        />
       )}
       <PositoChat />
     </div>
@@ -1459,7 +1471,7 @@ function formatHours(hours) {
   return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
 }
 
-function JiraAlertsPage({ dashboard, stats, loading, t, language, onRefresh }) {
+function JiraAlertsPage({ dashboard, stats, loading, t, language, onRefresh, onOpenComment }) {
   const [activeTab, setActiveTab] = useState('needsReview');
   const [monthFilter, setMonthFilter] = useState('all');
   const [ageFilter, setAgeFilter] = useState('all');
@@ -1646,7 +1658,14 @@ function JiraAlertsPage({ dashboard, stats, loading, t, language, onRefresh }) {
 
       <div className="jiraTabContent">
         {filteredAndSortedIssues.map(issue => (
-          <JiraTicketCard key={issue.id} issue={issue} t={t} language={language} onRefresh={onRefresh} />
+          <JiraTicketCard 
+            key={issue.id} 
+            issue={issue} 
+            t={t} 
+            language={language} 
+            onRefresh={onRefresh} 
+            onOpenComment={(mode) => onOpenComment(issue, mode)}
+          />
         ))}
         {filteredAndSortedIssues.length === 0 && (
           <div className="emptyState" style={{ gridColumn: '1 / -1', padding: '40px' }}>
@@ -1668,22 +1687,12 @@ function JiraStatCard({ label, value, onClick, active }) {
   );
 }
 
-function JiraTicketCard({ issue, t, language, onRefresh }) {
-  const [showAssign, setShowAssign] = useState(false);
+function JiraTicketCard({ issue, t, language, onRefresh, onOpenComment }) {
   const [showStatus, setShowStatus] = useState(false);
   const [transitions, setTransitions] = useState([]);
-  const [isReplying, setIsReplying] = useState(false);
-  const [isSendingReply, setIsSendingReply] = useState(false);
   const [isMovingStatus, setIsMovingStatus] = useState(false);
   const [localStatus, setLocalStatus] = useState(issue.status);
   const [countdown, setCountdown] = useState(null);
-  const [showCommentModal, setShowCommentModal] = useState(false);
-
-  // Jira autocomplete state
-  const [members, setMembers] = useState([]);
-  const [mentionSearch, setMentionSearch] = useState(null);
-  const [activeMemberIndex, setActiveMemberIndex] = useState(0);
-  const editorRef = useRef(null);
 
   useEffect(() => {
     setLocalStatus(issue.status);
@@ -1702,20 +1711,192 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
     return () => clearTimeout(timer);
   }, [countdown, onRefresh]);
 
-  useEffect(() => {
-    if (isReplying) {
-      api.jiraUsersSearch('').then(res => {
-        if (res?.users) {
-          setMembers(res.users.map(u => ({
-            id: u.id || u.accountId,
-            username: u.displayName.toLowerCase().replace(/\s+/g, '.'),
-            fullName: u.displayName,
-            avatarUrl: u.avatarUrl
-          })));
-        }
-      }).catch(console.error);
+  async function handleUpdateStatus(tid) {
+    if (isMovingStatus || countdown !== null) return;
+    setIsMovingStatus(true);
+    try {
+      const selectedTransition = transitions.find(tr => tr.id === tid);
+      const newStatusName = selectedTransition ? selectedTransition.name : 'Actualizado';
+
+      await api.jiraUpdateStatus(issue.key, tid);
+      
+      setLocalStatus(newStatusName);
+      setCountdown(3);
+    } catch (err) {
+      alert(err.message || 'Error al actualizar el estado.');
+    } finally {
+      setIsMovingStatus(false);
+      setShowStatus(false);
     }
-  }, [isReplying]);
+  }
+
+  async function loadTransitions() {
+    if (transitions.length > 0) return;
+    const res = await api.jiraTransitions(issue.key);
+    if (res?.transitions) setTransitions(res.transitions);
+  }
+
+  const copyUpdate = () => {
+    let text = '';
+    const status = localStatus;
+    if (status === 'Listo para Deploy' || status === 'Ready for Deploy' || status === 'Ready for deployment' || status === 'Ready for Release') {
+      text = t.jiraAlerts.templates.readyDeploy;
+    } else {
+      text = t.jiraAlerts.templates.inDev;
+    }
+    navigator.clipboard.writeText(text);
+  };
+
+  const priorityClass = issue.priority ? `priority-${issue.priority.toLowerCase()}` : '';
+
+  return (
+    <div className={`jiraCard ${issue.staleness} ${priorityClass}`}>
+      <div className="cardHeader">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span className="ticketKey">{issue.key} · {issue.reporterName || issue.author || 'Sistema'}</span>
+          <strong className="ticketTitle">{issue.summary}</strong>
+        </div>
+        <a href={issue.url} target="_blank" rel="noopener noreferrer" className="iconTextButton">
+          <ExternalLink size={14} />
+        </a>
+      </div>
+
+      {countdown !== null && (
+        <div className="countdownBanner">
+          <RefreshCw size={12} className="spin" />
+          <span>
+            {language === 'es' 
+              ? `La tarjeta se moverá de pestaña en ${countdown}...` 
+              : `The card will move tabs in ${countdown}...`}
+          </span>
+        </div>
+      )}
+
+      <div className="cardMeta">
+        <span className={`pill ${getStatusClass(localStatus)}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
+          {localStatus === 'Finalizar' ? 'Finalizado' : localStatus}
+        </span>
+        {issue.priority && (
+          <span className={`priorityBadge ${issue.priority.toLowerCase()}`}>
+            {issue.priority}
+          </span>
+        )}
+        {issue.assigneeName && <span><User size={10} /> {issue.assigneeName}</span>}
+        {issue.lastUpdateHours > 0 && <span>{formatMessage(t.jiraAlerts.waiting, { time: formatHours(issue.lastUpdateHours) })}</span>}
+        {issue.sprint && <span className="badge" style={{ fontSize: '10px' }}>{issue.sprint.name}</span>}
+      </div>
+
+      {issue.commentText && (
+        <div 
+          className="commentPreview"
+          onClick={() => onOpenComment('view')}
+          style={{ cursor: 'pointer' }}
+          title={language === 'es' ? 'Ver comentario completo' : 'View full comment'}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+            <strong style={{ fontSize: '11.5px', color: 'var(--ko-orange)' }}>{issue.author}</strong>
+            <span style={{ fontSize: '10px', color: 'var(--ko-text-muted)' }}>{language === 'es' ? 'comentó:' : 'commented:'}</span>
+          </div>
+          <div style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+            "{issue.commentText.length <= 150 
+                ? issue.commentText 
+                : issue.commentText.substring(0, 150) + '...'}"
+          </div>
+          {issue.commentText.length > 150 && (
+            <span 
+              style={{
+                display: 'block',
+                marginTop: '6px',
+                color: 'var(--ko-orange)',
+                fontSize: '11.5px',
+                fontWeight: '700',
+                textDecoration: 'underline'
+              }}
+            >
+              {language === 'es' ? 'Ver comentario completo' : 'Show full comment'}
+            </span>
+          )}
+        </div>
+      )}
+
+      {issue.remoteLinks?.length > 0 && (
+        <div className="remoteLinksList">
+          {issue.remoteLinks.map((link, idx) => (
+            <a 
+              key={idx} 
+              href={link.url} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className={`remoteLinkItem ${link.isPR ? 'is-pr' : 'is-workspace'}`}
+            >
+              {link.isPR ? <Bot size={12} /> : <ExternalLink size={12} />}
+              <span>{link.title || (link.isPR ? 'PR' : 'Workspace')}</span>
+            </a>
+          ))}
+        </div>
+      )}
+
+      <div className="cardActions">
+        <button className="actionBtn" onClick={copyUpdate} title={t.jiraAlerts.actions.copyUpdate}>
+          <ClipboardList size={14} /> {t.jiraAlerts.actions.copyUpdate}
+        </button>
+        
+        <div style={{ position: 'relative' }}>
+          <button 
+            className="actionBtn" 
+            onClick={() => { setShowStatus(!showStatus); loadTransitions(); }}
+            disabled={isMovingStatus}
+          >
+            {isMovingStatus ? <RefreshCw size={14} className="spin" /> : <ArrowRightLeft size={14} />}
+            {' '}
+            {isMovingStatus ? (language === 'es' ? 'Moviendo...' : 'Moving...') : t.jiraAlerts.actions.moveTo}
+          </button>
+          {showStatus && (
+            <div className="mentionDropdown" style={{ bottom: '100%', left: 0, marginBottom: '5px', width: '200px' }}>
+              {transitions.map(tr => (
+                <button key={tr.id} className="mentionItem" onClick={() => handleUpdateStatus(tr.id)}>
+                  {tr.name === 'Finalizar' ? 'Finalizada' : tr.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button className="actionBtn" onClick={() => onOpenComment('reply')}>
+          <MessageSquare size={14} /> {language === 'es' ? 'Responder' : 'Reply'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function JiraCommentReplyModal({ issue, mode, language, onClose, onRefresh, t }) {
+  const [isSendingReply, setIsSendingReply] = useState(false);
+  const [members, setMembers] = useState([]);
+  const [mentionSearch, setMentionSearch] = useState(null);
+  const [activeMemberIndex, setActiveMemberIndex] = useState(0);
+  const editorRef = useRef(null);
+
+  useEffect(() => {
+    api.jiraUsersSearch('').then(res => {
+      if (res?.users) {
+        setMembers(res.users.map(u => ({
+          id: u.id || u.accountId,
+          username: u.displayName.toLowerCase().replace(/\s+/g, '.'),
+          fullName: u.displayName,
+          avatarUrl: u.avatarUrl
+        })));
+      }
+    }).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (mode === 'reply' && editorRef.current) {
+      setTimeout(() => {
+        editorRef.current.focus();
+      }, 100);
+    }
+  }, [mode]);
 
   const filteredMembers = useMemo(() => {
     if (mentionSearch === null) return [];
@@ -1732,7 +1913,6 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
   };
 
   const handleInput = (e) => {
-    const text = e.target.innerText;
     const selection = window.getSelection();
     if (!selection.rangeCount) return;
     
@@ -1788,6 +1968,37 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
     editorRef.current?.focus();
   };
 
+  const handlePaste = async (e) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        e.preventDefault();
+        const blob = items[i].getAsFile();
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          try {
+            const res = await api.uploadJiraImage(issue.key, event.target.result);
+            if (res?.url) {
+              const img = document.createElement('img');
+              img.src = res.url;
+              img.style.maxWidth = '100%';
+              img.style.borderRadius = '8px';
+              img.style.display = 'block';
+              img.style.margin = '10px 0';
+              
+              const range = window.getSelection().getRangeAt(0);
+              range.insertNode(img);
+              range.collapse(false);
+            }
+          } catch (err) {
+            console.error('Failed to upload image', err);
+          }
+        };
+        reader.readAsDataURL(blob);
+      }
+    }
+  };
+
   const htmlToMarkdown = (html) => {
     let md = html
       .replace(/<strong data-mention-id="(.*?)"[^>]*>@(.*?)<\/strong>/g, '[mention:$1](@$2)')
@@ -1803,31 +2014,6 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
     return md.trim();
   };
 
-  async function handleUpdateStatus(tid) {
-    if (isMovingStatus || countdown !== null) return;
-    setIsMovingStatus(true);
-    try {
-      const selectedTransition = transitions.find(tr => tr.id === tid);
-      const newStatusName = selectedTransition ? selectedTransition.name : 'Actualizado';
-
-      await api.jiraUpdateStatus(issue.key, tid);
-      
-      setLocalStatus(newStatusName);
-      setCountdown(3);
-    } catch (err) {
-      alert(err.message || 'Error al actualizar el estado.');
-    } finally {
-      setIsMovingStatus(false);
-      setShowStatus(false);
-    }
-  }
-
-  async function loadTransitions() {
-    if (transitions.length > 0) return;
-    const res = await api.jiraTransitions(issue.key);
-    if (res?.transitions) setTransitions(res.transitions);
-  }
-
   async function handleSendReply(e) {
     e.preventDefault();
     const markdown = htmlToMarkdown(editorRef.current.innerHTML);
@@ -1835,10 +2021,9 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
     setIsSendingReply(true);
     try {
       await api.jiraAddComment(issue.key, markdown);
-      editorRef.current.innerHTML = '';
-      setIsReplying(false);
       alert(language === 'es' ? 'Respuesta enviada a Jira con éxito.' : 'Reply sent to Jira successfully.');
       onRefresh();
+      onClose();
     } catch (err) {
       alert(err.message || 'Error al enviar comentario');
     } finally {
@@ -1846,239 +2031,115 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
     }
   }
 
-  const copyUpdate = () => {
-    let text = '';
-    const status = localStatus;
-    if (status === 'Listo para Deploy' || status === 'Ready for Deploy' || status === 'Ready for deployment' || status === 'Ready for Release') {
-      text = t.jiraAlerts.templates.readyDeploy;
-    } else {
-      text = t.jiraAlerts.templates.inDev;
-    }
-    navigator.clipboard.writeText(text);
-  };
-
-  const priorityClass = issue.priority ? `priority-${issue.priority.toLowerCase()}` : '';
-
   return (
-    <div className={`jiraCard ${issue.staleness} ${priorityClass}`}>
-      <div className="cardHeader">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <span className="ticketKey">{issue.key} · {issue.reporterName || issue.author || 'Sistema'}</span>
-          <strong className="ticketTitle">{issue.summary}</strong>
-        </div>
-        <a href={issue.url} target="_blank" rel="noopener noreferrer" className="iconTextButton">
-          <ExternalLink size={14} />
-        </a>
-      </div>
-
-      {countdown !== null && (
-        <div className="countdownBanner">
-          <RefreshCw size={12} className="spin" />
-          <span>
-            {language === 'es' 
-              ? `La tarjeta se moverá de pestaña en ${countdown}...` 
-              : `The card will move tabs in ${countdown}...`}
-          </span>
-        </div>
-      )}
-
-      <div className="cardMeta">
-        <span className={`pill ${getStatusClass(localStatus)}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
-          {localStatus === 'Finalizar' ? 'Finalizado' : localStatus}
-        </span>
-        {issue.priority && (
-          <span className={`priorityBadge ${issue.priority.toLowerCase()}`}>
-            {issue.priority}
-          </span>
-        )}
-        {issue.assigneeName && <span><User size={10} /> {issue.assigneeName}</span>}
-        {issue.lastUpdateHours > 0 && <span>{formatMessage(t.jiraAlerts.waiting, { time: formatHours(issue.lastUpdateHours) })}</span>}
-        {issue.sprint && <span className="badge" style={{ fontSize: '10px' }}>{issue.sprint.name}</span>}
-      </div>
-
-      {issue.commentText && (
-        <div className="commentPreview">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-            <strong style={{ fontSize: '11.5px', color: 'var(--ko-orange)' }}>{issue.author}</strong>
-            <span style={{ fontSize: '10px', color: 'var(--ko-text-muted)' }}>{language === 'es' ? 'comentó:' : 'commented:'}</span>
-          </div>
-          <div style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-            "{issue.commentText.length <= 150 
-                ? issue.commentText 
-                : issue.commentText.substring(0, 150) + '...'}"
-          </div>
-          {issue.commentText.length > 150 && (
-            <button 
-              type="button" 
-              style={{
-                display: 'block',
-                marginTop: '6px',
-                padding: '0',
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--ko-orange)',
-                cursor: 'pointer',
-                textDecoration: 'underline',
-                fontSize: '11.5px',
-                fontWeight: '700'
-              }}
-              onClick={() => setShowCommentModal(true)}
-            >
-              {language === 'es' ? 'Ver comentario completo' : 'Show full comment'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {issue.remoteLinks?.length > 0 && (
-        <div className="remoteLinksList">
-          {issue.remoteLinks.map((link, idx) => (
-            <a 
-              key={idx} 
-              href={link.url} 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className={`remoteLinkItem ${link.isPR ? 'is-pr' : 'is-workspace'}`}
-            >
-              {link.isPR ? <Bot size={12} /> : <ExternalLink size={12} />}
-              <span>{link.title || (link.isPR ? 'PR' : 'Workspace')}</span>
-            </a>
-          ))}
-        </div>
-      )}
-
-      <div className="cardActions">
-        <button className="actionBtn" onClick={copyUpdate} title={t.jiraAlerts.actions.copyUpdate}>
-          <ClipboardList size={14} /> {t.jiraAlerts.actions.copyUpdate}
-        </button>
-        
-        <div style={{ position: 'relative' }}>
-          <button 
-            className="actionBtn" 
-            onClick={() => { setShowStatus(!showStatus); loadTransitions(); }}
-            disabled={isMovingStatus}
-          >
-            {isMovingStatus ? <RefreshCw size={14} className="spin" /> : <ArrowRightLeft size={14} />}
-            {' '}
-            {isMovingStatus ? (language === 'es' ? 'Moviendo...' : 'Moving...') : t.jiraAlerts.actions.moveTo}
+    <div className="modalOverlay" onClick={onClose}>
+      <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '650px', width: '100%' }}>
+        <div className="modalHeader">
+          <h2>{language === 'es' ? 'Detalle de Comentario' : 'Comment Details'}</h2>
+          <button className="closeButton" onClick={onClose}>
+            <X size={20} />
           </button>
-          {showStatus && (
-            <div className="mentionDropdown" style={{ bottom: '100%', left: 0, marginBottom: '5px', width: '200px' }}>
-              {transitions.map(tr => (
-                <button key={tr.id} className="mentionItem" onClick={() => handleUpdateStatus(tr.id)}>
-                  {tr.name === 'Finalizar' ? 'Finalizada' : tr.name}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
-
-        <button className="actionBtn" onClick={() => setIsReplying(!isReplying)}>
-          <MessageSquare size={14} /> {language === 'es' ? 'Responder' : 'Reply'}
-        </button>
-      </div>
-
-      {isReplying && (
-        <form className="replyForm" onSubmit={handleSendReply} style={{ marginTop: '12px' }}>
-          <div className="editorToolbar">
-            <button type="button" onClick={() => execCommand('bold')} title="Negrita"><Bold size={16} /></button>
-            <button type="button" onClick={() => execCommand('insertUnorderedList')} title="Bullets"><List size={16} /></button>
-            <button type="button" onClick={() => execCommand('insertOrderedList')} title="Lista numerada"><ListOrdered size={16} /></button>
-          </div>
-          <div className="mentionWrapper">
-            <div 
-              ref={editorRef}
-              contentEditable
-              className="richEditor"
-              onInput={handleInput}
-              onKeyDown={(e) => {
-                if (mentionSearch && filteredMembers.length > 0) {
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    setActiveMemberIndex(i => (i + 1) % filteredMembers.length);
-                  } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    setActiveMemberIndex(i => (i - 1 + filteredMembers.length) % filteredMembers.length);
-                  } else if (e.key === 'Enter' || e.key === 'Tab') {
-                    e.preventDefault();
-                    selectMember(filteredMembers[activeMemberIndex]);
-                  } else if (e.key === 'Escape') {
-                    setMentionSearch(null);
-                  }
-                }
-              }}
-            />
-            {mentionSearch && filteredMembers.length > 0 && (
-              <div className="mentionDropdown" style={{ width: '100%', bottom: '100%' }}>
-                {filteredMembers.map((member, index) => (
-                  <button
-                    key={member.id}
-                    type="button"
-                    className={index === activeMemberIndex ? 'mentionItem active' : 'mentionItem'}
-                    onClick={() => selectMember(member)}
-                  >
-                    <User size={14} />
-                    <div className="memberInfo">
-                      <strong>{member.fullName}</strong>
-                      <small>@{member.username}</small>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="replyActions" style={{ marginTop: '8px' }}>
-            <button type="button" className="ghost" onClick={() => setIsReplying(false)}>
-              {language === 'es' ? 'Cancelar' : 'Cancel'}
-            </button>
-            <button type="submit" className="primarySmall" disabled={isSendingReply}>
-              {language === 'es' ? 'Responder' : 'Reply'}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {showCommentModal && (
-        <div className="modalOverlay" onClick={() => setShowCommentModal(false)}>
-          <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '650px', width: '100%' }}>
-            <div className="modalHeader">
-              <h2>{language === 'es' ? 'Comentario completo' : 'Full comment'}</h2>
-              <button className="closeButton" onClick={() => setShowCommentModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="modalBody" style={{ maxHeight: '60vh', overflowY: 'auto', padding: '24px' }}>
+        <div className="modalBody" style={{ maxHeight: '65vh', overflowY: 'auto', padding: '24px' }}>
+          {/* Comment Author Header & Body (only if a comment exists) */}
+          {(issue.commentText || issue.commentHtml) && (
+            <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', borderBottom: '1px solid var(--ko-border)', paddingBottom: '12px' }}>
                 <div className="userAvatar" style={{ width: '32px', height: '32px', fontSize: '13px' }}>
-                  {issue.author.charAt(0).toUpperCase()}
+                  {(issue.author || 'S').charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <strong style={{ fontSize: '14px' }}>{issue.author}</strong>
-                  <div style={{ fontSize: '11px', color: 'var(--ko-text-muted)', marginTop: '2px' }}>
-                    {new Date(issue.updated).toLocaleString(language === 'es' ? 'es-AR' : 'en-US')}
-                  </div>
+                  <strong style={{ fontSize: '14px' }}>{issue.author || 'Sistema'}</strong>
+                  {issue.updated && (
+                    <div style={{ fontSize: '11px', color: 'var(--ko-text-muted)', marginTop: '2px' }}>
+                      {new Date(issue.updated).toLocaleString(language === 'es' ? 'es-AR' : 'en-US')}
+                    </div>
+                  )}
                 </div>
               </div>
+              
               <div 
                 className="fullCommentHtml"
-                dangerouslySetInnerHTML={{ __html: issue.commentHtml }}
+                dangerouslySetInnerHTML={{ __html: issue.commentHtml || `<p>${issue.commentText}</p>` }}
                 style={{
                   fontSize: '14px',
                   lineHeight: '1.6',
                   color: 'var(--ko-text)',
                   wordBreak: 'break-word',
-                  overflowWrap: 'break-word'
+                  overflowWrap: 'break-word',
+                  marginBottom: '24px'
                 }}
               />
-            </div>
-            <div className="modalFooter" style={{ padding: '16px 24px' }}>
-              <button className="primarySmall" onClick={() => setShowCommentModal(false)}>
-                {language === 'es' ? 'Cerrar' : 'Close'}
-              </button>
-            </div>
+            </>
+          )}
+
+          {/* Reply Form */}
+          <div style={{ borderTop: '1px solid var(--ko-border)', paddingTop: '20px', marginTop: '20px' }}>
+            <h4 style={{ margin: '0 0 12px 0', fontSize: '13.5px', color: 'var(--ko-orange)' }}>
+              {language === 'es' ? 'Escribir respuesta' : 'Write reply'}
+            </h4>
+            <form className="replyForm" onSubmit={handleSendReply} style={{ marginTop: '0' }}>
+              <div className="editorToolbar">
+                <button type="button" onClick={() => execCommand('bold')} title="Negrita"><Bold size={16} /></button>
+                <button type="button" onClick={() => execCommand('insertUnorderedList')} title="Bullets"><List size={16} /></button>
+                <button type="button" onClick={() => execCommand('insertOrderedList')} title="Lista numerada"><ListOrdered size={16} /></button>
+              </div>
+              <div className="mentionWrapper">
+                <div 
+                  ref={editorRef}
+                  contentEditable
+                  className="richEditor"
+                  onInput={handleInput}
+                  onPaste={handlePaste}
+                  onKeyDown={(e) => {
+                    if (mentionSearch && filteredMembers.length > 0) {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setActiveMemberIndex(i => (i + 1) % filteredMembers.length);
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setActiveMemberIndex(i => (i - 1 + filteredMembers.length) % filteredMembers.length);
+                      } else if (e.key === 'Enter' || e.key === 'Tab') {
+                        e.preventDefault();
+                        selectMember(filteredMembers[activeMemberIndex]);
+                      } else if (e.key === 'Escape') {
+                        setMentionSearch(null);
+                      }
+                    }
+                  }}
+                  placeholder={language === 'es' ? "Escribe una respuesta..." : "Write a reply..."}
+                />
+                {mentionSearch && filteredMembers.length > 0 && (
+                  <div className="mentionDropdown" style={{ width: '100%', bottom: '100%' }}>
+                    {filteredMembers.map((member, index) => (
+                      <button
+                        key={member.id}
+                        type="button"
+                        className={index === activeMemberIndex ? 'mentionItem active' : 'mentionItem'}
+                        onClick={() => selectMember(member)}
+                      >
+                        <User size={14} />
+                        <div className="memberInfo">
+                          <strong>{member.fullName}</strong>
+                          <small>@{member.username}</small>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="replyActions" style={{ marginTop: '8px' }}>
+                <button type="button" className="ghost" onClick={onClose}>
+                  {language === 'es' ? 'Cancelar' : 'Cancel'}
+                </button>
+                <button type="submit" className="primarySmall" disabled={isSendingReply}>
+                  {isSendingReply ? <RefreshCw size={12} className="spin" /> : (language === 'es' ? 'Responder' : 'Reply')}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

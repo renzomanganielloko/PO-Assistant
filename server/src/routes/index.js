@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { getCredentialStatus, saveCredentials, loadCredentials } from '../storage/credentialsStore.js';
 import { fetchBoards, fetchCards, fetchLists, validateTrelloCredentials, fetchBoardMembers, uploadFileToCard } from '../services/trelloService.js';
-import { fetchJiraProjects, getJiraAlerts, getAssignedIssuesCount, addJiraComment, updateIssueStatus, assignIssue, getIssueTransitions, createJiraRemoteLink, searchJiraUsers } from '../services/jiraService.js';
+import { fetchJiraProjects, getJiraAlerts, getAssignedIssuesCount, addJiraComment, updateIssueStatus, assignIssue, getIssueTransitions, createJiraRemoteLink, searchJiraUsers, uploadAttachmentToJira, downloadJiraAttachmentStream } from '../services/jiraService.js';
 import { normalizeTrelloCard } from '../services/mappingService.js';
 import { selectSyncCandidates } from '../services/syncRules.js';
 import { findAutomationByBoardId, getAutomation, listAutomations, upsertAutomation } from '../storage/automationStore.js';
@@ -430,6 +430,46 @@ apiRouter.post(
     const { text } = z.object({ text: z.string().min(1) }).parse(req.body);
     await addJiraComment(req.user._id, req.params.key, text);
     res.status(204).send();
+  })
+);
+
+apiRouter.post(
+  '/jira/issue/:key/upload',
+  asyncHandler(async (req, res) => {
+    const { attachment } = z.object({ attachment: z.string() }).parse(req.body);
+    const matches = attachment.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches) {
+      throw new AppError('Invalid attachment format', 400);
+    }
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+    const ext = mimeType.split('/')[1] || 'png';
+    const filename = `paste-${Date.now()}.${ext}`;
+
+    const data = await uploadAttachmentToJira(req.user._id, req.params.key, { filename, buffer });
+    const firstAttachment = data?.[0];
+    if (firstAttachment?.content) {
+      res.json({ url: firstAttachment.content, id: firstAttachment.id });
+    } else {
+      throw new AppError('Failed to upload attachment to Jira', 500);
+    }
+  })
+);
+
+apiRouter.get(
+  '/jira/attachment/:id',
+  asyncHandler(async (req, res) => {
+    try {
+      const { data, headers } = await downloadJiraAttachmentStream(req.user._id, req.params.id);
+      if (headers['content-type']) {
+        res.setHeader('Content-Type', headers['content-type']);
+      }
+      data.pipe(res);
+    } catch (err) {
+      console.error(`[Jira Attachment Proxy] Error:`, err.message);
+      res.status(500).send('Failed to download Jira attachment');
+    }
   })
 );
 
