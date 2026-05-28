@@ -1433,7 +1433,25 @@ function AutomationReport({ report, t }) {
   );
 }
 
+const priorityWeights = {
+  'Highest': 5,
+  'High': 4,
+  'Medium': 3,
+  'Low': 2,
+  'Lowest': 1
+};
+
 function JiraAlertsPage({ dashboard, stats, loading, t, language, onRefresh }) {
+  const sortIssues = (issues) => {
+    if (!issues) return [];
+    return [...issues].sort((a, b) => {
+      const wA = priorityWeights[a.priority] || 0;
+      const wB = priorityWeights[b.priority] || 0;
+      if (wA !== wB) return wB - wA;
+      return new Date(b.updated) - new Date(a.updated);
+    });
+  };
+
   const categories = [
     { id: 'needsReview', title: t.jiraAlerts.sections.review, icon: <ListChecks size={18} />, issues: dashboard.needsReview },
     { id: 'readyDeploy', title: t.jiraAlerts.sections.deploy, icon: <Play size={18} />, issues: dashboard.readyDeploy },
@@ -1456,22 +1474,25 @@ function JiraAlertsPage({ dashboard, stats, loading, t, language, onRefresh }) {
       </div>
 
       <div className="jiraGrid">
-        {categories.map(cat => (
-          <div key={cat.id} className="jiraSection">
-            <div className="sectionHeader">
-              <h3 className="sectionTitle">{cat.icon} {cat.title}</h3>
-              <span className="badge">{cat.issues?.length || 0}</span>
+        {categories.map(cat => {
+          const sorted = sortIssues(cat.issues);
+          return (
+            <div key={cat.id} className="jiraSection">
+              <div className="sectionHeader">
+                <h3 className="sectionTitle">{cat.icon} {cat.title}</h3>
+                <span className="badge">{cat.issues?.length || 0}</span>
+              </div>
+              <div className="jiraList" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {sorted.map(issue => (
+                  <JiraTicketCard key={issue.id} issue={issue} t={t} language={language} onRefresh={onRefresh} />
+                ))}
+                {sorted.length === 0 && (
+                  <p className="dimmed" style={{ fontSize: '12px', padding: '10px' }}>{t.jiraAlerts.noAlerts}</p>
+                )}
+              </div>
             </div>
-            <div className="jiraList" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {(cat.issues || []).map(issue => (
-                <JiraTicketCard key={issue.id} issue={issue} t={t} language={language} onRefresh={onRefresh} />
-              ))}
-              {(!cat.issues || cat.issues.length === 0) && (
-                <p className="dimmed" style={{ fontSize: '12px', padding: '10px' }}>{t.jiraAlerts.noAlerts}</p>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
@@ -1497,10 +1518,23 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
   const [isAddingLink, setIsAddingLink] = useState(false);
+  const [isMovingStatus, setIsMovingStatus] = useState(false);
 
   async function handleUpdateStatus(tid) {
-    await api.jiraUpdateStatus(issue.key, tid);
-    onRefresh();
+    if (isMovingStatus) return;
+    setIsMovingStatus(true);
+    try {
+      await api.jiraUpdateStatus(issue.key, tid);
+      alert(language === 'es' 
+        ? `Estado del ticket ${issue.key} actualizado correctamente.` 
+        : `Ticket status ${issue.key} updated successfully.`);
+      onRefresh();
+    } catch (err) {
+      alert(err.message || 'Error al actualizar el estado.');
+    } finally {
+      setIsMovingStatus(false);
+      setShowStatus(false);
+    }
   }
 
   async function loadTransitions() {
@@ -1517,6 +1551,7 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
       await api.jiraAddComment(issue.key, replyText.trim());
       setReplyText('');
       setIsReplying(false);
+      alert(language === 'es' ? 'Respuesta enviada a Jira con éxito.' : 'Reply sent to Jira successfully.');
       onRefresh();
     } catch (err) {
       alert(err.message || 'Error al enviar comentario');
@@ -1534,6 +1569,7 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
       setLinkUrl('');
       setLinkTitle('');
       setShowAddLink(false);
+      alert(language === 'es' ? 'Enlace de Workspace agregado con éxito.' : 'Workspace link added successfully.');
       onRefresh();
     } catch (err) {
       alert(err.message || 'Error al agregar link');
@@ -1553,8 +1589,10 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
     navigator.clipboard.writeText(text);
   };
 
+  const priorityClass = issue.priority ? `priority-${issue.priority.toLowerCase()}` : '';
+
   return (
-    <div className={`jiraCard ${issue.staleness}`}>
+    <div className={`jiraCard ${issue.staleness} ${priorityClass}`}>
       <div className="cardHeader">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           <span className="ticketKey">{issue.key} · {issue.author}</span>
@@ -1566,14 +1604,11 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
       </div>
 
       <div className="cardMeta">
-        <span className="pill ready" style={{ fontSize: '10px', padding: '2px 6px' }}>{issue.status}</span>
+        <span className="pill ready" style={{ fontSize: '10px', padding: '2px 6px' }}>
+          {issue.status === 'Finalizar' ? 'Finalizado' : issue.status}
+        </span>
         {issue.priority && (
-          <span className="badge" style={{ 
-            background: issue.priority === 'High' || issue.priority === 'Highest' ? 'rgba(239, 68, 68, 0.1)' : 'var(--ko-secondary-btn)',
-            color: issue.priority === 'High' || issue.priority === 'Highest' ? '#ef4444' : 'var(--ko-text-dim)',
-            border: 'none',
-            fontSize: '10px'
-          }}>
+          <span className={`priorityBadge ${issue.priority.toLowerCase()}`}>
             {issue.priority}
           </span>
         )}
@@ -1611,8 +1646,14 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
         </button>
         
         <div style={{ position: 'relative' }}>
-          <button className="actionBtn" onClick={() => { setShowStatus(!showStatus); loadTransitions(); }}>
-            <ArrowRightLeft size={14} /> {t.jiraAlerts.actions.moveTo}
+          <button 
+            className="actionBtn" 
+            onClick={() => { setShowStatus(!showStatus); loadTransitions(); }}
+            disabled={isMovingStatus}
+          >
+            {isMovingStatus ? <RefreshCw size={14} className="spin" /> : <ArrowRightLeft size={14} />}
+            {' '}
+            {isMovingStatus ? (language === 'es' ? 'Moviendo...' : 'Moving...') : t.jiraAlerts.actions.moveTo}
           </button>
           {showStatus && (
             <div className="mentionDropdown" style={{ bottom: '100%', left: 0, marginBottom: '5px', width: '200px' }}>

@@ -2259,3 +2259,47 @@ button:disabled {
 .remoteLinkItem.is-workspace:hover {
   background: rgba(250, 90, 30, 0.2);
 }
+
+/* Priority Styles for Jira alerts */
+.priorityBadge {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.priorityBadge.highest {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.priorityBadge.high {
+  background: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.priorityBadge.medium {
+  background: rgba(234, 179, 8, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+.priorityBadge.low,
+.priorityBadge.lowest {
+  background: var(--ko-secondary-btn);
+  color: var(--ko-text-muted);
+}
+
+.jiraCard.priority-highest {
+  background: linear-gradient(to right, rgba(239, 68, 68, 0.04), var(--ko-bg-card));
+}
+
+.jiraCard.priority-high {
+  background: linear-gradient(to right, rgba(249, 115, 22, 0.03), var(--ko-bg-card));
+}
