@@ -14,7 +14,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { authRouter } from './auth.js';
 import { auth } from '../middleware/auth.js';
 
-import { getAuthUrl, setTokens, fetchEmails, summarizeEmail, fetchLabels } from '../services/gmailService.js';
+import { getAuthUrl, setTokens, fetchEmails, summarizeEmail, fetchLabels, archiveMessage, markAsRead as markGmailAsRead } from '../services/gmailService.js';
 import { summarizeText } from '../services/geminiService.js';
 import { answerAssistantQuestion, assistantQuestions, assistantCategories } from '../services/assistantService.js';
 
@@ -100,6 +100,31 @@ apiRouter.get(
     const labelId = req.query.labelId || 'INBOX';
     const emails = await fetchEmails(req.user._id, labelId);
     res.json({ emails });
+  })
+);
+
+apiRouter.post(
+  '/gmail/emails/:id/archive',
+  asyncHandler(async (req, res) => {
+    await archiveMessage(req.user._id, req.params.id);
+    res.status(204).send();
+  })
+);
+
+apiRouter.post(
+  '/gmail/emails/:id/read',
+  asyncHandler(async (req, res) => {
+    await markGmailAsRead(req.user._id, req.params.id);
+    res.status(204).send();
+  })
+);
+
+apiRouter.post(
+  '/gmail/emails/:id/summarize',
+  asyncHandler(async (req, res) => {
+    const { email } = req.body;
+    const summary = await summarizeEmail(req.user._id, email);
+    res.json({ summary });
   })
 );
 
@@ -359,7 +384,34 @@ apiRouter.post(
 apiRouter.get(
   '/jira/alerts',
   asyncHandler(async (req, res) => {
-    res.json({ alerts: await getJiraAlerts(req.user._id) });
+    const data = await getJiraAlerts(req.user._id);
+    res.json(data);
+  })
+);
+
+apiRouter.post(
+  '/jira/issue/:key/status',
+  asyncHandler(async (req, res) => {
+    const { transitionId } = req.body;
+    await updateIssueStatus(req.user._id, req.params.key, transitionId);
+    res.json({ success: true });
+  })
+);
+
+apiRouter.post(
+  '/jira/issue/:key/assign',
+  asyncHandler(async (req, res) => {
+    const { accountId } = req.body;
+    await assignIssue(req.user._id, req.params.key, accountId);
+    res.json({ success: true });
+  })
+);
+
+apiRouter.get(
+  '/jira/issue/:key/transitions',
+  asyncHandler(async (req, res) => {
+    const transitions = await getIssueTransitions(req.user._id, req.params.key);
+    res.json({ transitions });
   })
 );
 

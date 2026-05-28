@@ -64,6 +64,20 @@ export function App() {
   const [pendingRefineAI, setPendingRefineAI] = useState(false);
   const [alerts, setAlerts] = useState([]);
   const [jiraAlerts, setJiraAlerts] = useState([]);
+  const [jiraDashboard, setJiraDashboard] = useState({
+    needsReview: [],
+    readyDeploy: [],
+    blocked: [],
+    forgotten: [],
+    commentRadar: [],
+    recentActivity: []
+  });
+  const [jiraStats, setJiraStats] = useState({
+    reviewCount: 0,
+    deployCount: 0,
+    blockedCount: 0,
+    forgottenCount: 0
+  });
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
 
@@ -114,7 +128,11 @@ export function App() {
 
   async function loadJiraAlerts() {
     const result = await run('jiraAlerts', () => api.jiraAlerts());
-    if (result) setJiraAlerts(result.alerts);
+    if (result) {
+      setJiraAlerts(result.alerts || []);
+      setJiraDashboard(result.dashboard || {});
+      setJiraStats(result.stats || {});
+    }
   }
 
   async function markJiraAlertAsRead(id) {
@@ -456,9 +474,9 @@ export function App() {
       <main className="main">
         <header className="topbar">
           <div>
-            <p className="eyebrow">{t.eyebrow} / {t.nav[activePage]}</p>
+            <p className="eyebrow">{t.eyebrow} / {t.nav[activePage] || activePage}</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <h2>{t.nav[activePage]}</h2>
+              <h2>{t.nav[activePage] || activePage}</h2>
             </div>
           </div>
           <div className="topbarControls">
@@ -672,6 +690,8 @@ export function App() {
         {activePage === 'jiraAlerts' && (
           <JiraAlertsPage 
             alerts={jiraAlerts} 
+            dashboard={jiraDashboard}
+            stats={jiraStats}
             loading={loading} 
             t={t} 
             language={language}
@@ -1413,75 +1433,152 @@ function AutomationReport({ report, t }) {
   );
 }
 
-function JiraAlertsPage({ alerts, loading, t, language, onRefresh, onMarkAsRead }) {
+function JiraAlertsPage({ dashboard, stats, loading, t, language, onRefresh }) {
+  const categories = [
+    { id: 'needsReview', title: t.jiraAlerts.sections.review, icon: <ListChecks size={18} />, issues: dashboard.needsReview },
+    { id: 'readyDeploy', title: t.jiraAlerts.sections.deploy, icon: <Play size={18} />, issues: dashboard.readyDeploy },
+    { id: 'forgotten', title: t.jiraAlerts.sections.forgotten, icon: <Activity size={18} />, issues: dashboard.forgotten },
+    { id: 'commentRadar', title: t.jiraAlerts.sections.comments, icon: <MessageSquare size={18} />, issues: dashboard.commentRadar }
+  ];
+
   return (
-    <section className="workspace alertsWorkspace">
-      <div className="alertsFeed" style={{ gridColumn: '1 / span 2', width: '100%' }}>
-        <div className="toolbar">
-          <button className="primary" onClick={onRefresh} disabled={loading === 'jiraAlerts'}>
-            <RefreshCw size={18} className={loading === 'jiraAlerts' ? 'spin' : ''} /> {t.jiraAlerts.refresh}
-          </button>
+    <section className="jiraDashboard">
+      <div className="toolbar" style={{ justifyContent: 'space-between', padding: '0 0 10px 0' }}>
+        <div className="jiraStats">
+          <JiraStatCard label={t.jiraAlerts.stats.review} value={stats.reviewCount} />
+          <JiraStatCard label={t.jiraAlerts.stats.deploy} value={stats.deployCount} />
+          <JiraStatCard label={t.jiraAlerts.stats.stuck} value={stats.blockedCount} />
+          <JiraStatCard label={t.jiraAlerts.stats.forgotten} value={stats.forgottenCount} />
         </div>
+        <button className="primary" onClick={onRefresh} disabled={loading === 'jiraAlerts'} style={{ alignSelf: 'flex-start' }}>
+          <RefreshCw size={18} className={loading === 'jiraAlerts' ? 'spin' : ''} /> {t.jiraAlerts.refresh}
+        </button>
+      </div>
 
-        <div className="alertList">
-          {alerts.map((alert) => (
-            <div key={alert.id} className="alertItem">
-              <div className="alertHeader">
-                <div className={alert.isAssignee ? 'alertIcon type-move' : 'alertIcon type-comment'}>
-                  {alert.isAssignee ? <User size={20} /> : <MessageSquare size={20} />}
-                </div>
-                <div className="alertMeta">
-                  <span className="boardTag">{alert.key}</span>
-                  <span className="dot">•</span>
-                  <span className="badge" style={{ 
-                    background: alert.priority === 'High' || alert.priority === 'Highest' ? 'var(--ko-orange)' : 'var(--ko-secondary-btn)',
-                    color: alert.priority === 'High' || alert.priority === 'Highest' ? 'white' : 'var(--ko-text)',
-                    fontSize: '11px'
-                  }}>
-                    {alert.priority || 'Medium'}
-                  </span>
-                  <span className="dot">•</span>
-                  <time>{new Date(alert.updated).toLocaleString('es-AR', { hour12: false })}</time>
-                </div>
-              </div>
-              <div className="alertContent">
-                <p className="alertAction">
-                  <strong>{alert.author}</strong> {
-                    alert.actionType === 'mention' 
-                      ? (language === 'es' ? 'te ha mencionado en un comentario' : 'mentioned you in a comment')
-                      : (language === 'es' ? 'te ha asignado la tarea' : 'assigned the task to you')
-                  }: {alert.summary}
-                </p>
-                {alert.commentText && (
-                  <blockquote className="commentText" style={{ margin: '8px 0', fontSize: '13px' }}>
-                    {alert.commentText}
-                  </blockquote>
-                )}
-                <div style={{ marginTop: '12px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span className="pill ready">{alert.status}</span>
-                  <span className="pill">{alert.type}</span>
-                  <a 
-                    href={alert.url} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="alertLink"
-                    onClick={() => onMarkAsRead(alert.id)}
-                  >
-                    <ExternalLink size={14} /> Jira
-                  </a>
-                </div>
-              </div>
+      <div className="jiraGrid">
+        {categories.map(cat => (
+          <div key={cat.id} className="jiraSection">
+            <div className="sectionHeader">
+              <h3 className="sectionTitle">{cat.icon} {cat.title}</h3>
+              <span className="badge">{cat.issues?.length || 0}</span>
             </div>
-          ))}
-
-          {alerts.length === 0 && !loading && (
-            <div className="emptyState">
-              <Activity size={48} />
-              <p>{t.jiraAlerts.noAlerts}</p>
+            <div className="jiraList" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {(cat.issues || []).map(issue => (
+                <JiraTicketCard key={issue.id} issue={issue} t={t} language={language} onRefresh={onRefresh} />
+              ))}
+              {(!cat.issues || cat.issues.length === 0) && (
+                <p className="dimmed" style={{ fontSize: '12px', padding: '10px' }}>{t.jiraAlerts.noAlerts}</p>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        ))}
       </div>
     </section>
   );
 }
+
+function JiraStatCard({ label, value }) {
+  return (
+    <div className="statCard">
+      <span className="statValue">{value}</span>
+      <span className="statLabel">{label}</span>
+    </div>
+  );
+}
+
+function JiraTicketCard({ issue, t, language, onRefresh }) {
+  const [showAssign, setShowAssign] = useState(false);
+  const [showStatus, setShowStatus] = useState(false);
+  const [transitions, setTransitions] = useState([]);
+
+  async function handleUpdateStatus(tid) {
+    await api.jiraUpdateStatus(issue.key, tid);
+    onRefresh();
+  }
+
+  async function loadTransitions() {
+    if (transitions.length > 0) return;
+    const res = await api.jiraTransitions(issue.key);
+    if (res?.transitions) setTransitions(res.transitions);
+  }
+
+  const copyUpdate = () => {
+    let text = '';
+    const status = issue.status;
+    if (status === 'Listo para Deploy' || status === 'Ready for Deploy' || status === 'Ready for deployment' || status === 'Ready for Release') {
+      text = t.jiraAlerts.templates.readyDeploy;
+    } else {
+      text = t.jiraAlerts.templates.inDev;
+    }
+    navigator.clipboard.writeText(text);
+  };
+
+  return (
+    <div className={`jiraCard ${issue.staleness}`}>
+      <div className="cardHeader">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span className="ticketKey">{issue.key} · {issue.author}</span>
+          <strong className="ticketTitle">{issue.summary}</strong>
+        </div>
+        <a href={issue.url} target="_blank" rel="noopener noreferrer" className="iconTextButton">
+          <ExternalLink size={14} />
+        </a>
+      </div>
+
+      <div className="cardMeta">
+        <span className="pill ready" style={{ fontSize: '10px', padding: '2px 6px' }}>{issue.status}</span>
+        {issue.priority && (
+          <span className="badge" style={{ 
+            background: issue.priority === 'High' || issue.priority === 'Highest' ? 'rgba(239, 68, 68, 0.1)' : 'var(--ko-secondary-btn)',
+            color: issue.priority === 'High' || issue.priority === 'Highest' ? '#ef4444' : 'var(--ko-text-dim)',
+            border: 'none',
+            fontSize: '10px'
+          }}>
+            {issue.priority}
+          </span>
+        )}
+        {issue.assigneeName && <span><User size={10} /> {issue.assigneeName}</span>}
+        {issue.lastUpdateHours > 0 && <span>{formatMessage(t.jiraAlerts.waiting, { time: `${issue.lastUpdateHours}h` })}</span>}
+        {issue.sprint && <span className="badge" style={{ fontSize: '10px' }}>{issue.sprint.name}</span>}
+      </div>
+
+      {issue.commentText && (
+        <div className="commentPreview">
+          "{issue.commentText.length > 100 ? issue.commentText.substring(0, 100) + '...' : issue.commentText}"
+        </div>
+      )}
+
+      {issue.remoteLinks?.length > 0 && (
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {issue.remoteLinks.filter(l => l.isPR).map((link, idx) => (
+            <a key={idx} href={link.url} target="_blank" rel="noopener noreferrer" className="prBadge">
+              <Bot size={12} /> PR
+            </a>
+          ))}
+        </div>
+      )}
+
+      <div className="cardActions">
+        <button className="actionBtn" onClick={copyUpdate} title={t.jiraAlerts.actions.copyUpdate}>
+          <ClipboardList size={14} /> {t.jiraAlerts.actions.copyUpdate}
+        </button>
+        
+        <div style={{ position: 'relative' }}>
+          <button className="actionBtn" onClick={() => { setShowStatus(!showStatus); loadTransitions(); }}>
+            <ArrowRightLeft size={14} /> {t.jiraAlerts.actions.moveTo}
+          </button>
+          {showStatus && (
+            <div className="mentionDropdown" style={{ bottom: '100%', left: 0, marginBottom: '5px', width: '200px' }}>
+              {transitions.map(tr => (
+                <button key={tr.id} className="mentionItem" onClick={() => handleUpdateStatus(tr.id)}>
+                  {tr.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+

@@ -1,8 +1,10 @@
 import { google } from 'googleapis';
 import { loadCredentials, saveCredentials } from '../storage/credentialsStore.js';
 import { generateGeminiText } from './geminiService.js';
+import { analyzeEmail } from './emailHeuristics.js';
 
-const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
+const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.modify'];
+const SUMMARY_CACHE = new Map(); // Simple in-memory cache for summaries
 
 export function getOAuth2Client() {
   const redirectUri = process.env.REDIRECT_URI || 'http://localhost:4000/api/gmail/callback';
@@ -74,9 +76,11 @@ export async function fetchLabels(userId) {
   }));
 }
 
-export async function fetchEmails(userId, labelId = 'INBOX', limit = 15) {
+export async function fetchEmails(userId, labelId = 'INBOX', limit = 30) {
   const auth = await getAuthenticatedClient(userId);
   const gmail = google.gmail({ version: 'v1', auth });
+
+  console.log(`[Gmail] Fetching emails for label: ${labelId}, limit: ${limit}`);
 
   const res = await gmail.users.messages.list({
     userId: 'me',
@@ -86,6 +90,8 @@ export async function fetchEmails(userId, labelId = 'INBOX', limit = 15) {
   });
 
   const messages = res.data.messages || [];
+  console.log(`[Gmail] Found ${messages.length} messages`);
+
   const emails = await Promise.all(
     messages.map(async (msg) => {
       try {
@@ -98,7 +104,9 @@ export async function fetchEmails(userId, labelId = 'INBOX', limit = 15) {
         const headers = detail.data.payload.headers;
         const subject = headers.find(h => h.name === 'Subject')?.value || '(No Subject)';
         const from = headers.find(h => h.name === 'From')?.value || '(Unknown)';
+        const date = headers.find(h => h.name === 'Date')?.value;
         const snippet = detail.data.snippet;
+        const labelIds = detail.data.labelIds || [];
 
         let body = '';
         if (detail.data.payload.parts) {
@@ -110,14 +118,25 @@ export async function fetchEmails(userId, labelId = 'INBOX', limit = 15) {
           body = Buffer.from(detail.data.payload.body.data, 'base64').toString();
         }
 
-        return {
+        const emailData = {
           id: msg.id,
           threadId: msg.threadId,
           subject,
           from,
           snippet,
           body: body.slice(0, 2000),
-          date: headers.find(h => h.name === 'Date')?.value
+          date,
+          labelIds
+        };
+
+        const analysis = analyzeEmail(emailData);
+        console.log(`[Gmail] Analyzed: "${subject}" -> Categories: ${analysis.categories.join(', ')}`);
+
+        return {
+          ...emailData,
+          ...analysis,
+          hasSummary: SUMMARY_CACHE.has(msg.id),
+          cachedSummary: SUMMARY_CACHE.get(msg.id)
         };
       } catch (err) {
         console.error(`Error fetching message ${msg.id}:`, err.message);
@@ -137,21 +156,49 @@ export async function getUnreadEmailCount(userId, labelId = 'INBOX') {
 }
 
 export async function summarizeEmail(userId, email) {
+  // Check cache first
+  if (SUMMARY_CACHE.has(email.id)) {
+    return SUMMARY_CACHE.get(email.id);
+  }
+
   try {
     const prompt = `
-      Eres un asistente eficiente. Resume el siguiente correo electronico en una o dos oraciones maximo.
-      Enfocate en la accion requerida o el punto principal.
-
+      Eres un asistente eficiente para un Product Owner. Resume el siguiente correo electronico en una o dos oraciones maximo.
+      Identifica puntos clave, bloqueos o acciones requeridas.
+      
       De: ${email.from}
       Asunto: ${email.subject}
       Contenido: ${email.snippet} ${email.body}
 
-      Resumen corto:
+      Resumen ejecutivo:
     `;
 
-    return generateGeminiText(userId, prompt);
+    const summary = await generateGeminiText(userId, prompt);
+    SUMMARY_CACHE.set(email.id, summary);
+    return summary;
   } catch (error) {
     console.error('[Gmail AI] Summarization failed:', error.message);
     return 'No se pudo generar el resumen.';
   }
 }
+
+export async function markAsRead(userId, messageId) {
+  const auth = await getAuthenticatedClient(userId);
+  const gmail = google.gmail({ version: 'v1', auth });
+  await gmail.users.messages.batchModify({
+    userId: 'me',
+    ids: [messageId],
+    removeLabelIds: ['UNREAD']
+  });
+}
+
+export async function archiveMessage(userId, messageId) {
+  const auth = await getAuthenticatedClient(userId);
+  const gmail = google.gmail({ version: 'v1', auth });
+  await gmail.users.messages.batchModify({
+    userId: 'me',
+    ids: [messageId],
+    removeLabelIds: ['INBOX']
+  });
+}
+

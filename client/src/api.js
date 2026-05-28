@@ -86,6 +86,17 @@ export const api = {
   pendingCards: () => request('/sync/pending'),
   jiraProjects: () => request('/jira/projects'),
   jiraAlerts: () => request('/jira/alerts'),
+  jiraUpdateStatus: (key, transitionId) =>
+    request(`/jira/issue/${encodeURIComponent(key)}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ transitionId })
+    }),
+  jiraAssignIssue: (key, accountId) =>
+    request(`/jira/issue/${encodeURIComponent(key)}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId })
+    }),
+  jiraTransitions: (key) => request(`/jira/issue/${encodeURIComponent(key)}/transitions`),
   markJiraAlertAsRead: (id) =>
     request('/jira/alerts/read', {
       method: 'POST',
@@ -119,6 +130,13 @@ export const api = {
   getGmailLabels: () => request('/gmail/labels'),
   disconnectGmail: () => request('/gmail/disconnect', { method: 'POST' }),
   getEmails: (labelId) => request(`/gmail/emails?labelId=${encodeURIComponent(labelId || 'INBOX')}`),
+  archiveEmail: (id) => request(`/gmail/emails/${id}/archive`, { method: 'POST' }),
+  markEmailRead: (id) => request(`/gmail/emails/${id}/read`, { method: 'POST' }),
+  gmailSummarize: (id, email) => 
+    request(`/gmail/emails/${id}/summarize`, { 
+      method: 'POST', 
+      body: JSON.stringify({ email }) 
+    }),
   aiSummarize: (text, type = 'corto') => 
     request('/gemini/summarize', { 
       method: 'POST', 

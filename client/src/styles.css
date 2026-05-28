@@ -875,11 +875,14 @@ button:disabled {
 .boardSelect span {
   font-weight: 800;
   font-size: 18px;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .boardSelect small {
   color: var(--ko-text-muted);
   font-size: 13px;
+  word-break: break-all;
 }
 
 .automationBox {
@@ -935,7 +938,7 @@ button:disabled {
   padding: 0 16px;
   font-size: 13px;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   padding-right: 36px !important;
@@ -949,19 +952,23 @@ button:disabled {
 
 .automationFooter {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
   gap: 12px;
   margin-top: 8px;
 }
 
 .footerButtons {
   display: flex;
-  gap: 6px;
-  flex: 1;
-  justify-content: flex-end;
-  min-width: fit-content;
+  gap: 8px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.footerButtons .iconTextButton {
+  flex: 1 1 calc(50% - 4px);
+  justify-content: center;
+  min-width: 120px;
 }
 
 .iconTextButton {
@@ -2040,4 +2047,171 @@ button:disabled {
 .positoQuestionList button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* Jira Operational Dashboard */
+.jiraDashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.jiraStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  flex: 1;
+}
+
+.statCard {
+  background: var(--ko-bg-card);
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--ko-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statValue {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ko-orange);
+}
+
+.statLabel {
+  font-size: 10px;
+  color: var(--ko-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.jiraGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1024px) {
+  .jiraGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.jiraSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.jiraCard {
+  background: var(--ko-bg-card);
+  border: 1px solid var(--ko-border);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.jiraCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.jiraCard.forgotten { border-left: 4px solid var(--ko-orange); }
+.jiraCard.stale { border-left: 4px solid var(--ko-text-dim); }
+.jiraCard.blocked { border-left: 4px solid #ef4444; }
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.ticketKey {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ko-text-dim);
+}
+
+.ticketTitle {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--ko-text-dim);
+}
+
+.cardActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  border-top: 1px solid var(--ko-border);
+  padding-top: 8px;
+}
+
+.actionBtn {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  background: var(--ko-secondary-btn);
+  border: none;
+  color: var(--ko-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.2s;
+}
+
+.actionBtn:hover {
+  background: var(--ko-secondary-btn-hover);
+}
+
+.commentPreview {
+  font-size: 12px;
+  font-style: italic;
+  background: var(--ko-bg);
+  padding: 6px 10px;
+  border-radius: 6px;
+  border-left: 2px solid var(--ko-border);
+  color: var(--ko-text-dim);
+}
+
+.prBadge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 11px;
 }

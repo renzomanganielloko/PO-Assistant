@@ -43,102 +43,215 @@ export async function getAssignedIssuesCount(userId) {
   }
 }
 
+let sprintFieldId = null;
+
+async function getSprintFieldId(client) {
+  if (sprintFieldId) return sprintFieldId;
+  try {
+    const { data } = await client.get('/rest/api/3/field');
+    const field = data.find(f => f.name === 'Sprint' || f.schema?.custom === 'com.pyxis.greenhopper.jira:gh-sprint');
+    if (field) sprintFieldId = field.id;
+  } catch (e) {
+    console.warn('[Jira] Could not fetch fields for sprint detection');
+  }
+  return sprintFieldId;
+}
+
 export async function getJiraAlerts(userId) {
   const client = await jiraClient(userId);
   const readAlerts = await getReadAlerts(userId);
+  const sprintField = await getSprintFieldId(client);
 
-  let myAccountId = '';
-  let myDisplayName = '';
+  let myself = null;
   try {
-    const { data: myself } = await client.get('/rest/api/3/myself');
-    myAccountId = myself.accountId;
-    myDisplayName = myself.displayName;
+    const { data } = await client.get('/rest/api/3/myself');
+    myself = data;
   } catch (e) {
     console.warn('Could not fetch myself info from Jira', e.message);
   }
 
-  // Buscamos tareas donde el usuario esté mencionado o sea el asignado
-  const jql = `text ~ "currentUser()" OR assignee = currentUser() ORDER BY updated DESC`;
+  const myAccountId = myself?.accountId || '';
+  const myDisplayName = myself?.displayName || '';
+
+  // JQL ampliada para cubrir todo el flujo operativo del PO
+  // Buscamos: revisión, deploy, bloqueados, progreso y donde el usuario esté involucrado
+  const projects = await fetchJiraProjects(userId).catch(() => []);
+  const projectKeys = projects.map(p => p.key);
+
+  let projectFilter = '';
+  if (projectKeys.length > 0) {
+    projectFilter = `project in (${projectKeys.map(k => `"${k}"`).join(', ')}) AND `;
+  }
+
+  const jql = `${projectFilter}(status in ("En Revisión", "Listo para Deploy", "Bloqueado", "En Progreso", "In Review", "Ready for Deploy", "Ready for deployment", "Blocked", "In Progress", "Ready for Release") OR assignee = currentUser() OR text ~ "currentUser()") ORDER BY updated DESC`;
   
   try {
     const { data } = await client.post('/rest/api/3/search/jql', {
       jql,
-      maxResults: 30,
+      maxResults: 50,
       expand: "changelog",
-      fields: ["summary", "status", "issuetype", "updated", "assignee", "priority", "comment"]
+      fields: ["summary", "status", "issuetype", "updated", "assignee", "priority", "comment", "labels", "components", sprintField].filter(Boolean)
     });
 
-    return (data.issues || [])
-      .filter(issue => !readAlerts.includes(issue.id))
-      .map(issue => {
-        const fields = issue.fields;
-        
-        // Extraemos comentarios y cambios
-        const comments = (fields.comment?.comments || []).map(c => ({ 
-          date: c.created, 
-          author: c.author, 
-          type: 'comment', 
-          body: c.body,
-          text: extractTextFromAdf(c.body)
-        }));
+    const now = new Date();
+    const processedIssues = await Promise.all((data.issues || []).map(async issue => {
+      const fields = issue.fields;
+      
+      // Extraemos comentarios y cambios
+      const comments = (fields.comment?.comments || []).map(c => ({ 
+        date: c.created, 
+        author: c.author, 
+        type: 'comment', 
+        body: c.body,
+        text: extractTextFromAdf(c.body)
+      }));
 
-        const changes = (issue.changelog?.histories || []).map(h => ({ 
-          date: h.created, 
-          author: h.author, 
-          type: 'change', 
-          items: h.items 
-        }));
+      const lastComment = comments.length > 0 ? comments[comments.length - 1] : null;
 
-        // Buscamos si hay una mención específica en los comentarios
-        const mentionActivity = comments.find(c => {
-          const bodyStr = JSON.stringify(c.body);
-          return bodyStr.includes(myAccountId) || bodyStr.includes(myDisplayName);
-        });
+      const changes = (issue.changelog?.histories || []).map(h => ({ 
+        date: h.created, 
+        author: h.author, 
+        type: 'change', 
+        items: h.items 
+      }));
 
-        // Buscamos si hay una asignación específica
-        const assignmentActivity = changes.find(h => 
-          h.items.some(i => i.field === 'assignee' && i.to === myAccountId)
-        );
+      // Buscamos actividad relevante (menciones o asignaciones)
+      const mentionActivity = comments.find(c => {
+        const bodyStr = JSON.stringify(c.body);
+        return bodyStr.includes(myAccountId) || (myDisplayName && bodyStr.includes(myDisplayName));
+      });
 
-        // Priorizamos la mención, luego la asignación, luego el último cambio que no sea mío
-        const rel = mentionActivity || assignmentActivity || comments[0] || changes[0];
-        if (!rel) return null;
+      const assignmentActivity = changes.find(h => 
+        h.items.some(i => i.field === 'assignee' && i.to === myAccountId)
+      );
 
-        let actionType = 'update';
-        let commentText = '';
+      const rel = mentionActivity || assignmentActivity || lastComment || changes[0];
+      
+      let actionType = 'update';
+      let commentText = '';
 
-        if (mentionActivity && rel === mentionActivity) {
-          actionType = 'mention';
-          commentText = mentionActivity.text;
-        } else if (assignmentActivity && rel === assignmentActivity) {
-          actionType = 'assign';
-        } else if (fields.assignee?.accountId === myAccountId) {
-          actionType = 'update';
-        } else {
-          return null;
+      if (mentionActivity) {
+        actionType = 'mention';
+        commentText = mentionActivity.text;
+      } else if (assignmentActivity) {
+        actionType = 'assign';
+      } else if (fields.assignee?.accountId === myAccountId) {
+        actionType = 'update';
+      }
+
+      // Staleness logic (Heurística de inactividad)
+      const updatedDate = new Date(fields.updated);
+      const diffHours = (now - updatedDate) / (1000 * 60 * 60);
+      
+      const statusName = fields.status.name;
+      const isUnderReview = statusName === 'En Revisión' || statusName === 'In Review';
+      const isInProgress = statusName === 'En Progreso' || statusName === 'In Progress';
+      const isBlocked = statusName === 'Bloqueado' || statusName === 'Blocked';
+      const isReadyDeploy = statusName === 'Listo para Deploy' || statusName === 'Ready for Deploy' || statusName === 'Ready for deployment' || statusName === 'Ready for Release';
+
+      let staleness = 'active';
+      if (isUnderReview && diffHours > 24) staleness = 'forgotten';
+      else if (isInProgress && diffHours > 72) staleness = 'stale';
+      else if (isBlocked) staleness = 'blocked';
+
+      // Bitbucket / PR Detection (Remote Links)
+      let remoteLinks = [];
+      if (isReadyDeploy || isUnderReview) {
+        try {
+          const { data: links } = await client.get(`/rest/api/3/issue/${issue.key}/remotelink`);
+          remoteLinks = (links || []).map(l => ({
+            title: l.object.title,
+            url: l.object.url,
+            isPR: l.object.url.includes('/pull-requests/') || l.object.title.toLowerCase().includes('pr')
+          }));
+        } catch (e) {
+          // Silent fail for links
         }
+      }
 
-        return {
-          id: issue.id, 
-          key: issue.key, 
-          summary: fields.summary, 
-          status: fields.status.name,
-          type: fields.issuetype.name, 
-          updated: rel.date, 
-          priority: fields.priority?.name,
-          author: rel.author?.displayName || 'Sistema', 
-          actionType, 
-          commentText,
-          isAssignee: fields.assignee?.accountId === myAccountId,
-          url: `${client.defaults.baseURL}/browse/${issue.key}`
-        };
-      })
-      .filter(Boolean);
+      // Sprint Detection
+      let sprint = null;
+      if (sprintField && fields[sprintField]) {
+        const sprintArray = fields[sprintField];
+        if (Array.isArray(sprintArray)) {
+          const activeSprint = sprintArray.find(s => s.state === 'active') || sprintArray[sprintArray.length - 1];
+          if (activeSprint) {
+            sprint = { id: activeSprint.id, name: activeSprint.name, state: activeSprint.state };
+          }
+        }
+      }
+
+      return {
+        id: issue.id, 
+        key: issue.key, 
+        summary: fields.summary, 
+        status: fields.status.name,
+        type: fields.issuetype.name, 
+        updated: fields.updated, 
+        priority: fields.priority?.name,
+        author: rel?.author?.displayName || 'Sistema', 
+        authorId: rel?.author?.accountId,
+        actionType, 
+        commentText: commentText || (lastComment ? lastComment.text : ''),
+        isAssignee: fields.assignee?.accountId === myAccountId,
+        assigneeName: fields.assignee?.displayName,
+        assigneeId: fields.assignee?.accountId,
+        labels: fields.labels || [],
+        components: (fields.components || []).map(c => c.name),
+        url: `${client.defaults.baseURL}/browse/${issue.key}`,
+        staleness,
+        remoteLinks,
+        sprint,
+        lastUpdateHours: Math.floor(diffHours)
+      };
+    }));
+
+    // Categorización para el Dashboard Operativo
+    const dashboard = {
+      needsReview: processedIssues.filter(i => i.status === 'En Revisión' || i.status === 'In Review'),
+      readyDeploy: processedIssues.filter(i => i.status === 'Listo para Deploy' || i.status === 'Ready for Deploy' || i.status === 'Ready for deployment' || i.status === 'Ready for Release'),
+      blocked: processedIssues.filter(i => i.status === 'Bloqueado' || i.status === 'Blocked' || i.staleness === 'blocked'),
+      forgotten: processedIssues.filter(i => i.staleness === 'forgotten' || i.staleness === 'stale'),
+      commentRadar: processedIssues.filter(i => i.commentText && i.authorId !== myAccountId).slice(0, 10),
+      recentActivity: processedIssues.slice(0, 15)
+    };
+
+    return { 
+      alerts: processedIssues.filter(issue => !readAlerts.includes(issue.id)),
+      dashboard,
+      stats: {
+        reviewCount: dashboard.needsReview.length,
+        deployCount: dashboard.readyDeploy.length,
+        blockedCount: dashboard.blocked.length,
+        forgottenCount: dashboard.forgotten.length
+      }
+    };
   } catch (e) {
     console.error('Jira Alerts fetch failed:', e.response?.data || e.message);
-    return [];
+    return { alerts: [], dashboard: {}, stats: {} };
   }
 }
+
+export async function updateIssueStatus(userId, issueKey, transitionId) {
+  const client = await jiraClient(userId);
+  await client.post(`/rest/api/3/issue/${issueKey}/transitions`, {
+    transition: { id: transitionId }
+  });
+}
+
+export async function assignIssue(userId, issueKey, accountId) {
+  const client = await jiraClient(userId);
+  await client.put(`/rest/api/3/issue/${issueKey}/assignee`, {
+    accountId
+  });
+}
+
+export async function getIssueTransitions(userId, issueKey) {
+  const client = await jiraClient(userId);
+  const { data } = await client.get(`/rest/api/3/issue/${issueKey}/transitions`);
+  return data.transitions || [];
+}
+
 
 function extractTextFromAdf(adf) {
   if (!adf || !adf.content) return '';
