@@ -1677,16 +1677,37 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
   const [isSendingReply, setIsSendingReply] = useState(false);
   const [isMovingStatus, setIsMovingStatus] = useState(false);
   const [commentExpanded, setCommentExpanded] = useState(false);
+  const [localStatus, setLocalStatus] = useState(issue.status);
+  const [countdown, setCountdown] = useState(null);
+
+  useEffect(() => {
+    setLocalStatus(issue.status);
+  }, [issue.status]);
+
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown === 0) {
+      setCountdown(null);
+      onRefresh();
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCountdown(prev => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [countdown, onRefresh]);
 
   async function handleUpdateStatus(tid) {
-    if (isMovingStatus) return;
+    if (isMovingStatus || countdown !== null) return;
     setIsMovingStatus(true);
     try {
+      const selectedTransition = transitions.find(tr => tr.id === tid);
+      const newStatusName = selectedTransition ? selectedTransition.name : 'Actualizado';
+
       await api.jiraUpdateStatus(issue.key, tid);
-      alert(language === 'es' 
-        ? `Estado del ticket ${issue.key} actualizado correctamente.` 
-        : `Ticket status ${issue.key} updated successfully.`);
-      onRefresh();
+      
+      setLocalStatus(newStatusName);
+      setCountdown(3);
     } catch (err) {
       alert(err.message || 'Error al actualizar el estado.');
     } finally {
@@ -1720,7 +1741,7 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
 
   const copyUpdate = () => {
     let text = '';
-    const status = issue.status;
+    const status = localStatus;
     if (status === 'Listo para Deploy' || status === 'Ready for Deploy' || status === 'Ready for deployment' || status === 'Ready for Release') {
       text = t.jiraAlerts.templates.readyDeploy;
     } else {
@@ -1743,9 +1764,20 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
         </a>
       </div>
 
+      {countdown !== null && (
+        <div className="countdownBanner">
+          <RefreshCw size={12} className="spin" />
+          <span>
+            {language === 'es' 
+              ? `La tarjeta se moverá de pestaña en ${countdown}...` 
+              : `The card will move tabs in ${countdown}...`}
+          </span>
+        </div>
+      )}
+
       <div className="cardMeta">
-        <span className={`pill ${getStatusClass(issue.status)}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
-          {issue.status === 'Finalizar' ? 'Finalizado' : issue.status}
+        <span className={`pill ${getStatusClass(localStatus)}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
+          {localStatus === 'Finalizar' ? 'Finalizado' : localStatus}
         </span>
         {issue.priority && (
           <span className={`priorityBadge ${issue.priority.toLowerCase()}`}>
