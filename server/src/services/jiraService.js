@@ -83,12 +83,12 @@ export async function getJiraAlerts(userId) {
     projectFilter = `project in (${projectKeys.map(k => `"${k}"`).join(', ')}) AND `;
   }
 
-  const jql = `${projectFilter}(statusCategory != Done) AND (reporter = currentUser() OR assignee = currentUser()) ORDER BY updated DESC`;
+  const jql = `(statusCategory != Done) AND (reporter = currentUser() OR assignee = currentUser()) ORDER BY updated DESC`;
   
   try {
     const { data } = await client.post('/rest/api/3/search/jql', {
       jql,
-      maxResults: 150,
+      maxResults: 500,
       expand: "changelog",
       fields: ["summary", "status", "issuetype", "created", "updated", "assignee", "reporter", "priority", "comment", "labels", "components", sprintField].filter(Boolean)
     });

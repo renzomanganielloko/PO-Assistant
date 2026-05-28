@@ -1441,6 +1441,16 @@ const priorityWeights = {
   'Lowest': 1
 };
 
+function getStatusClass(status) {
+  const s = (status || '').toLowerCase();
+  if (s.includes('revis') || s.includes('review')) return 'status-review';
+  if (s.includes('deploy') || s.includes('release') || s.includes('finaliza')) return 'status-deploy';
+  if (s.includes('bloque') || s.includes('block')) return 'status-blocked';
+  if (s.includes('progr') || s.includes('dev') || s.includes('progress')) return 'status-progress';
+  if (s.includes('todo') || s.includes('hacer') || s.includes('backlog')) return 'status-todo';
+  return 'status-default';
+}
+
 function formatHours(hours) {
   if (hours <= 0) return '';
   if (hours < 24) return `${hours}h`;
@@ -1734,7 +1744,7 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
       </div>
 
       <div className="cardMeta">
-        <span className="pill ready" style={{ fontSize: '10px', padding: '2px 6px' }}>
+        <span className={`pill ${getStatusClass(issue.status)}`} style={{ fontSize: '10px', padding: '2px 6px' }}>
           {issue.status === 'Finalizar' ? 'Finalizado' : issue.status}
         </span>
         {issue.priority && (
