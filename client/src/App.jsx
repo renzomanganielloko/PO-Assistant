@@ -1753,7 +1753,7 @@ function JiraTicketCard({ issue, t, language, onRefresh, onOpenComment }) {
     <div className={`jiraCard ${issue.staleness} ${priorityClass}`}>
       <div className="cardHeader">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <span className="ticketKey">{issue.key} · {issue.reporterName || issue.author || 'Sistema'}</span>
+          <span className="ticketKey">{issue.key} · {issue.assigneeName || (language === 'es' ? 'Sin asignar' : 'Unassigned')}</span>
           <strong className="ticketTitle">{issue.summary}</strong>
         </div>
         <a href={issue.url} target="_blank" rel="noopener noreferrer" className="iconTextButton">
@@ -2080,10 +2080,10 @@ function JiraCommentReplyModal({ issue, mode, language, onClose, onRefresh, t })
 
           {/* Reply Form */}
           <div style={{ borderTop: '1px solid var(--ko-border)', paddingTop: '20px', marginTop: '20px' }}>
-            <h4 style={{ margin: '0 0 12px 0', fontSize: '13.5px', color: 'var(--ko-orange)' }}>
-              {language === 'es' ? 'Escribir respuesta' : 'Write reply'}
-            </h4>
             <form className="replyForm" onSubmit={handleSendReply} style={{ marginTop: '0' }}>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: '13.5px', color: 'var(--ko-orange)' }}>
+                {language === 'es' ? 'Responder' : 'Reply'}
+              </h4>
               <div className="editorToolbar">
                 <button type="button" onClick={() => execCommand('bold')} title="Negrita"><Bold size={16} /></button>
                 <button type="button" onClick={() => execCommand('insertUnorderedList')} title="Bullets"><List size={16} /></button>
