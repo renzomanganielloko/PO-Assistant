@@ -8,7 +8,7 @@ export function selectSyncCandidates({ cards, lists }) {
   const sprintCards = cards.filter((card) => sprintListIds.has(card.listId));
   const cardsWithoutJiraLink = sprintCards.filter((card) => !hasJiraAttachment(card));
   
-  const eligibleCards = sprintCards;
+  const eligibleCards = cardsWithoutJiraLink;
 
   return {
     sprintListIds,

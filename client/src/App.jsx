@@ -1441,66 +1441,217 @@ const priorityWeights = {
   'Lowest': 1
 };
 
+function formatHours(hours) {
+  if (hours <= 0) return '';
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
+}
+
 function JiraAlertsPage({ dashboard, stats, loading, t, language, onRefresh }) {
-  const sortIssues = (issues) => {
-    if (!issues) return [];
-    return [...issues].sort((a, b) => {
-      const wA = priorityWeights[a.priority] || 0;
-      const wB = priorityWeights[b.priority] || 0;
-      if (wA !== wB) return wB - wA;
-      return new Date(b.updated) - new Date(a.updated);
-    });
-  };
+  const [activeTab, setActiveTab] = useState('needsReview');
+  const [monthFilter, setMonthFilter] = useState('all');
+  const [ageFilter, setAgeFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('priority');
 
   const categories = [
-    { id: 'needsReview', title: t.jiraAlerts.sections.review, icon: <ListChecks size={18} />, issues: dashboard.needsReview },
-    { id: 'readyDeploy', title: t.jiraAlerts.sections.deploy, icon: <Play size={18} />, issues: dashboard.readyDeploy },
-    { id: 'forgotten', title: t.jiraAlerts.sections.forgotten, icon: <Activity size={18} />, issues: dashboard.forgotten },
-    { id: 'commentRadar', title: t.jiraAlerts.sections.comments, icon: <MessageSquare size={18} />, issues: dashboard.commentRadar }
+    { id: 'needsReview', title: t.jiraAlerts.sections.review, icon: <ListChecks size={18} />, issues: dashboard.needsReview || [] },
+    { id: 'readyDeploy', title: t.jiraAlerts.sections.deploy, icon: <Play size={18} />, issues: dashboard.readyDeploy || [] },
+    { id: 'blocked', title: language === 'es' ? 'Bloqueadas' : 'Blocked', icon: <X size={18} />, issues: dashboard.blocked || [] },
+    { id: 'forgotten', title: t.jiraAlerts.sections.forgotten, icon: <Activity size={18} />, issues: dashboard.forgotten || [] },
+    { id: 'commentRadar', title: t.jiraAlerts.sections.comments, icon: <MessageSquare size={18} />, issues: dashboard.commentRadar || [] },
+    { id: 'myAssignments', title: language === 'es' ? 'Mis Asignaciones' : 'My Assignments', icon: <User size={18} />, issues: dashboard.myAssignments || [] },
+    { id: 'reportedByMe', title: language === 'es' ? 'Informadas por mí' : 'Reported by me', icon: <ClipboardList size={18} />, issues: dashboard.reportedByMe || [] },
+    { id: 'allOpen', title: language === 'es' ? 'Todas' : 'All', icon: <ListOrdered size={18} />, issues: dashboard.allOpen || [] }
   ];
+
+  const availableMonths = useMemo(() => {
+    const monthsSet = new Set();
+    const allIssues = dashboard.allOpen || [];
+    allIssues.forEach(issue => {
+      const dateStr = issue.created || issue.updated;
+      if (dateStr) {
+        const date = new Date(dateStr);
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        monthsSet.add(`${y}-${m}`);
+      }
+    });
+    return Array.from(monthsSet).sort().reverse();
+  }, [dashboard.allOpen]);
+
+  const formatMonthYearStr = (ymStr) => {
+    if (!ymStr) return '';
+    const [year, month] = ymStr.split('-');
+    const monthNamesEs = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+    const monthNamesEn = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const names = language === 'es' ? monthNamesEs : monthNamesEn;
+    const idx = parseInt(month, 10) - 1;
+    return `${names[idx]} ${year}`;
+  };
+
+  const activeCategory = categories.find(cat => cat.id === activeTab) || categories[0];
+
+  const filteredAndSortedIssues = useMemo(() => {
+    let list = [...activeCategory.issues];
+
+    if (monthFilter !== 'all') {
+      list = list.filter(issue => {
+        const dateStr = issue.created || issue.updated;
+        if (!dateStr) return false;
+        const date = new Date(dateStr);
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        return `${y}-${m}` === monthFilter;
+      });
+    }
+
+    if (ageFilter !== 'all') {
+      const now = new Date();
+      list = list.filter(issue => {
+        const dateStr = issue.created || issue.updated;
+        if (!dateStr) return false;
+        const date = new Date(dateStr);
+        const diffTime = Math.abs(now - date);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (ageFilter === '7d') return diffDays > 7;
+        if (ageFilter === '30d') return diffDays > 30;
+        if (ageFilter === '90d') return diffDays > 90;
+        return true;
+      });
+    }
+
+    list.sort((a, b) => {
+      if (sortBy === 'priority') {
+        const wA = priorityWeights[a.priority] || 0;
+        const wB = priorityWeights[b.priority] || 0;
+        if (wA !== wB) return wB - wA;
+        return new Date(b.updated) - new Date(a.updated);
+      } else if (sortBy === 'newest') {
+        const dateA = new Date(a.created || a.updated);
+        const dateB = new Date(b.created || b.updated);
+        return dateB - dateA;
+      } else if (sortBy === 'oldest') {
+        const dateA = new Date(a.created || a.updated);
+        const dateB = new Date(b.created || b.updated);
+        return dateA - dateB;
+      }
+      return 0;
+    });
+
+    return list;
+  }, [activeCategory.issues, monthFilter, ageFilter, sortBy]);
 
   return (
     <section className="jiraDashboard">
       <div className="toolbar" style={{ justifyContent: 'space-between', padding: '0 0 10px 0' }}>
         <div className="jiraStats">
-          <JiraStatCard label={t.jiraAlerts.stats.review} value={stats.reviewCount} />
-          <JiraStatCard label={t.jiraAlerts.stats.deploy} value={stats.deployCount} />
-          <JiraStatCard label={t.jiraAlerts.stats.stuck} value={stats.blockedCount} />
-          <JiraStatCard label={t.jiraAlerts.stats.forgotten} value={stats.forgottenCount} />
+          <JiraStatCard label={t.jiraAlerts.stats.review} value={stats.reviewCount} onClick={() => setActiveTab('needsReview')} active={activeTab === 'needsReview'} />
+          <JiraStatCard label={t.jiraAlerts.stats.deploy} value={stats.deployCount} onClick={() => setActiveTab('readyDeploy')} active={activeTab === 'readyDeploy'} />
+          <JiraStatCard label={t.jiraAlerts.stats.stuck} value={stats.blockedCount} onClick={() => setActiveTab('blocked')} active={activeTab === 'blocked'} />
+          <JiraStatCard label={t.jiraAlerts.stats.forgotten} value={stats.forgottenCount} onClick={() => setActiveTab('forgotten')} active={activeTab === 'forgotten'} />
         </div>
         <button className="primary" onClick={onRefresh} disabled={loading === 'jiraAlerts'} style={{ alignSelf: 'flex-start' }}>
           <RefreshCw size={18} className={loading === 'jiraAlerts' ? 'spin' : ''} /> {t.jiraAlerts.refresh}
         </button>
       </div>
 
-      <div className="jiraGrid">
+      <div className="jiraTabs">
         {categories.map(cat => {
-          const sorted = sortIssues(cat.issues);
+          const isActive = activeTab === cat.id;
           return (
-            <div key={cat.id} className="jiraSection">
-              <div className="sectionHeader">
-                <h3 className="sectionTitle">{cat.icon} {cat.title}</h3>
-                <span className="badge">{cat.issues?.length || 0}</span>
-              </div>
-              <div className="jiraList" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {sorted.map(issue => (
-                  <JiraTicketCard key={issue.id} issue={issue} t={t} language={language} onRefresh={onRefresh} />
-                ))}
-                {sorted.length === 0 && (
-                  <p className="dimmed" style={{ fontSize: '12px', padding: '10px' }}>{t.jiraAlerts.noAlerts}</p>
-                )}
-              </div>
-            </div>
+            <button
+              key={cat.id}
+              type="button"
+              className={`jiraTabButton ${isActive ? 'active' : ''}`}
+              onClick={() => setActiveTab(cat.id)}
+            >
+              {cat.icon}
+              <span>{cat.title}</span>
+              <span className="tabBadge">{cat.issues?.length || 0}</span>
+            </button>
           );
         })}
+      </div>
+
+      <div className="jiraFiltersBar">
+        <div className="jiraFilterSelectGroup">
+          <span className="jiraFilterLabel">{language === 'es' ? 'Mes:' : 'Month:'}</span>
+          <select 
+            className="jiraFilterSelect" 
+            value={monthFilter} 
+            onChange={(e) => setMonthFilter(e.target.value)}
+          >
+            <option value="all">{language === 'es' ? 'Todos los meses' : 'All months'}</option>
+            {availableMonths.map(ym => (
+              <option key={ym} value={ym}>{formatMonthYearStr(ym)}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="jiraFilterSelectGroup">
+          <span className="jiraFilterLabel">{language === 'es' ? 'Antigüedad:' : 'Age:'}</span>
+          <select 
+            className="jiraFilterSelect" 
+            value={ageFilter} 
+            onChange={(e) => setAgeFilter(e.target.value)}
+          >
+            <option value="all">{language === 'es' ? 'Cualquiera' : 'Any age'}</option>
+            <option value="7d">{language === 'es' ? 'Más de 7 días' : 'Older than 7 days'}</option>
+            <option value="30d">{language === 'es' ? 'Más de 30 días' : 'Older than 30 days'}</option>
+            <option value="90d">{language === 'es' ? 'Más de 90 días' : 'Older than 90 days'}</option>
+          </select>
+        </div>
+
+        <div className="jiraFilterSelectGroup">
+          <span className="jiraFilterLabel">{language === 'es' ? 'Ordenar por:' : 'Sort by:'}</span>
+          <select 
+            className="jiraFilterSelect" 
+            value={sortBy} 
+            onChange={(e) => setSortBy(e.target.value)}
+          >
+            <option value="priority">{language === 'es' ? 'Prioridad' : 'Priority'}</option>
+            <option value="newest">{language === 'es' ? 'Más reciente' : 'Newest'}</option>
+            <option value="oldest">{language === 'es' ? 'Más antigua' : 'Oldest'}</option>
+          </select>
+        </div>
+
+        {(monthFilter !== 'all' || ageFilter !== 'all') && (
+          <button 
+            type="button" 
+            className="jiraClearFiltersBtn"
+            onClick={() => { setMonthFilter('all'); setAgeFilter('all'); }}
+          >
+            {language === 'es' ? 'Limpiar filtros' : 'Clear filters'}
+          </button>
+        )}
+      </div>
+
+      <div className="jiraTabContent">
+        {filteredAndSortedIssues.map(issue => (
+          <JiraTicketCard key={issue.id} issue={issue} t={t} language={language} onRefresh={onRefresh} />
+        ))}
+        {filteredAndSortedIssues.length === 0 && (
+          <div className="emptyState" style={{ gridColumn: '1 / -1', padding: '40px' }}>
+            <AlertCircle size={36} color="var(--ko-text-dim)" />
+            <p className="dimmed">{language === 'es' ? 'No se encontraron tareas con los filtros seleccionados.' : 'No issues found with the selected filters.'}</p>
+          </div>
+        )}
       </div>
     </section>
   );
 }
 
-function JiraStatCard({ label, value }) {
+function JiraStatCard({ label, value, onClick, active }) {
   return (
-    <div className="statCard">
+    <div className={`statCard ${active ? 'active' : ''}`} onClick={onClick} style={{ cursor: 'pointer' }}>
       <span className="statValue">{value}</span>
       <span className="statLabel">{label}</span>
     </div>
@@ -1514,11 +1665,8 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
   const [isReplying, setIsReplying] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
-  const [showAddLink, setShowAddLink] = useState(false);
-  const [linkUrl, setLinkUrl] = useState('');
-  const [linkTitle, setLinkTitle] = useState('');
-  const [isAddingLink, setIsAddingLink] = useState(false);
   const [isMovingStatus, setIsMovingStatus] = useState(false);
+  const [commentExpanded, setCommentExpanded] = useState(false);
 
   async function handleUpdateStatus(tid) {
     if (isMovingStatus) return;
@@ -1560,24 +1708,6 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
     }
   }
 
-  async function handleSaveLink(e) {
-    e.preventDefault();
-    if (!linkUrl.trim() || !linkTitle.trim() || isAddingLink) return;
-    setIsAddingLink(true);
-    try {
-      await api.jiraAddLink(issue.key, { title: linkTitle.trim(), url: linkUrl.trim() });
-      setLinkUrl('');
-      setLinkTitle('');
-      setShowAddLink(false);
-      alert(language === 'es' ? 'Enlace de Workspace agregado con éxito.' : 'Workspace link added successfully.');
-      onRefresh();
-    } catch (err) {
-      alert(err.message || 'Error al agregar link');
-    } finally {
-      setIsAddingLink(false);
-    }
-  }
-
   const copyUpdate = () => {
     let text = '';
     const status = issue.status;
@@ -1613,13 +1743,38 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
           </span>
         )}
         {issue.assigneeName && <span><User size={10} /> {issue.assigneeName}</span>}
-        {issue.lastUpdateHours > 0 && <span>{formatMessage(t.jiraAlerts.waiting, { time: `${issue.lastUpdateHours}h` })}</span>}
+        {issue.lastUpdateHours > 0 && <span>{formatMessage(t.jiraAlerts.waiting, { time: formatHours(issue.lastUpdateHours) })}</span>}
         {issue.sprint && <span className="badge" style={{ fontSize: '10px' }}>{issue.sprint.name}</span>}
       </div>
 
       {issue.commentText && (
         <div className="commentPreview">
-          "{issue.commentText.length > 100 ? issue.commentText.substring(0, 100) + '...' : issue.commentText}"
+          "{commentExpanded || issue.commentText.length <= 150 
+              ? issue.commentText 
+              : issue.commentText.substring(0, 150) + '...'}"
+          {issue.commentText.length > 150 && (
+            <button 
+              type="button" 
+              style={{
+                display: 'inline',
+                marginLeft: '5px',
+                padding: '2px 6px',
+                height: 'auto',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--ko-orange)',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                fontSize: '11px',
+                fontWeight: '700'
+              }}
+              onClick={() => setCommentExpanded(!commentExpanded)}
+            >
+              {commentExpanded 
+                ? (language === 'es' ? 'Ver menos' : 'Show less') 
+                : (language === 'es' ? 'Ver comentario completo' : 'Show full comment')}
+            </button>
+          )}
         </div>
       )}
 
@@ -1669,10 +1824,6 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
         <button className="actionBtn" onClick={() => setIsReplying(!isReplying)}>
           <MessageSquare size={14} /> {language === 'es' ? 'Responder' : 'Reply'}
         </button>
-
-        <button className="actionBtn" onClick={() => setShowAddLink(!showAddLink)}>
-          <PlusCircle size={14} /> {language === 'es' ? 'Link Workspace' : 'Add Link'}
-        </button>
       </div>
 
       {isReplying && (
@@ -1702,61 +1853,6 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
           >
             {isSendingReply ? <RefreshCw size={12} className="spin" /> : <Send size={12} />}
           </button>
-        </form>
-      )}
-
-      {showAddLink && (
-        <form onSubmit={handleSaveLink} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px', background: 'var(--ko-bg-header)', padding: '10px', borderRadius: '6px' }}>
-          <input
-            type="text"
-            placeholder={language === 'es' ? "Título del link (ej: Workspace Figma)" : "Link Title (e.g. Workspace Figma)"}
-            value={linkTitle}
-            onChange={(e) => setLinkTitle(e.target.value)}
-            style={{
-              height: '32px',
-              fontSize: '12px',
-              padding: '0 12px',
-              borderRadius: '6px',
-              border: '1px solid var(--ko-border)',
-              background: 'var(--ko-input-bg)',
-              color: 'var(--ko-text)'
-            }}
-            required
-          />
-          <input
-            type="url"
-            placeholder="https://..."
-            value={linkUrl}
-            onChange={(e) => setLinkUrl(e.target.value)}
-            style={{
-              height: '32px',
-              fontSize: '12px',
-              padding: '0 12px',
-              borderRadius: '6px',
-              border: '1px solid var(--ko-border)',
-              background: 'var(--ko-input-bg)',
-              color: 'var(--ko-text)'
-            }}
-            required
-          />
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-            <button 
-              type="button" 
-              className="ghost" 
-              style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer' }} 
-              onClick={() => setShowAddLink(false)}
-            >
-              {language === 'es' ? 'Cancelar' : 'Cancel'}
-            </button>
-            <button 
-              type="submit" 
-              className="primarySmall" 
-              style={{ height: '28px', padding: '0 12px', borderRadius: '6px', fontSize: '11px' }}
-              disabled={isAddingLink}
-            >
-              {isAddingLink ? <RefreshCw size={12} className="spin" /> : (language === 'es' ? 'Agregar' : 'Add')}
-            </button>
-          </div>
         </form>
       )}
     </div>

@@ -83,14 +83,14 @@ export async function getJiraAlerts(userId) {
     projectFilter = `project in (${projectKeys.map(k => `"${k}"`).join(', ')}) AND `;
   }
 
-  const jql = `${projectFilter}(status in ("En Revisión", "Listo para Deploy", "Bloqueado", "En Progreso", "In Review", "Ready for Deploy", "Ready for deployment", "Blocked", "In Progress", "Ready for Release")) AND (reporter = currentUser() OR assignee = currentUser()) ORDER BY updated DESC`;
+  const jql = `${projectFilter}(statusCategory != Done) AND (reporter = currentUser() OR assignee = currentUser()) ORDER BY updated DESC`;
   
   try {
     const { data } = await client.post('/rest/api/3/search/jql', {
       jql,
-      maxResults: 50,
+      maxResults: 150,
       expand: "changelog",
-      fields: ["summary", "status", "issuetype", "updated", "assignee", "priority", "comment", "labels", "components", sprintField].filter(Boolean)
+      fields: ["summary", "status", "issuetype", "created", "updated", "assignee", "reporter", "priority", "comment", "labels", "components", sprintField].filter(Boolean)
     });
 
     const now = new Date();
@@ -187,6 +187,7 @@ export async function getJiraAlerts(userId) {
         summary: fields.summary, 
         status: fields.status.name,
         type: fields.issuetype.name, 
+        created: fields.created,
         updated: fields.updated, 
         priority: fields.priority?.name,
         author: rel?.author?.displayName || 'Sistema', 
@@ -196,6 +197,9 @@ export async function getJiraAlerts(userId) {
         isAssignee: fields.assignee?.accountId === myAccountId,
         assigneeName: fields.assignee?.displayName,
         assigneeId: fields.assignee?.accountId,
+        reporterId: fields.reporter?.accountId,
+        reporterName: fields.reporter?.displayName,
+        isReporter: fields.reporter?.accountId === myAccountId,
         labels: fields.labels || [],
         components: (fields.components || []).map(c => c.name),
         url: `${client.defaults.baseURL}/browse/${issue.key}`,
@@ -213,6 +217,9 @@ export async function getJiraAlerts(userId) {
       blocked: processedIssues.filter(i => i.status === 'Bloqueado' || i.status === 'Blocked' || i.staleness === 'blocked'),
       forgotten: processedIssues.filter(i => i.staleness === 'forgotten' || i.staleness === 'stale'),
       commentRadar: processedIssues.filter(i => i.commentText && i.authorId !== myAccountId).slice(0, 10),
+      myAssignments: processedIssues.filter(i => i.isAssignee),
+      reportedByMe: processedIssues.filter(i => i.isReporter),
+      allOpen: processedIssues,
       recentActivity: processedIssues.slice(0, 15)
     };
 
@@ -223,7 +230,10 @@ export async function getJiraAlerts(userId) {
         reviewCount: dashboard.needsReview.length,
         deployCount: dashboard.readyDeploy.length,
         blockedCount: dashboard.blocked.length,
-        forgottenCount: dashboard.forgotten.length
+        forgottenCount: dashboard.forgotten.length,
+        assignedCount: dashboard.myAssignments.length,
+        reportedCount: dashboard.reportedByMe.length,
+        allCount: dashboard.allOpen.length
       }
     };
   } catch (e) {
