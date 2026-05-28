@@ -460,22 +460,38 @@ export async function uploadAttachmentToJira(userId, issueKey, { filename, buffe
 }
 
 export async function downloadJiraAttachmentStream(userId, attachmentId) {
-  const client = await jiraClient(userId);
-  const response = await client.get(`/rest/api/3/attachment/content/${attachmentId}`, {
-    maxRedirects: 0,
-    validateStatus: (status) => status >= 200 && status < 400
+  const credentials = await loadCredentials(userId);
+  if (!credentials.jiraBaseUrl || !credentials.jiraEmail || !credentials.jiraApiToken) {
+    throw new AppError('Jira credentials are not configured.', 400);
+  }
+  const authHeader = 'Basic ' + Buffer.from(`${credentials.jiraEmail}:${credentials.jiraApiToken}`).toString('base64');
+  const baseUrl = credentials.jiraBaseUrl.replace(/\/+$/, '');
+  const url = `${baseUrl}/rest/api/3/attachment/content/${attachmentId}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': authHeader,
+      'Accept': 'application/json'
+    },
+    redirect: 'manual'
   });
 
   if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
-    const redirectUrl = response.headers.location;
-    const fileResponse = await axios.get(redirectUrl, {
-      responseType: 'stream',
-      timeout: 30000
-    });
-    return { data: fileResponse.data, headers: fileResponse.headers };
+    const redirectUrl = response.headers.get('location');
+    const fileResponse = await fetch(redirectUrl);
+    const buffer = await fileResponse.arrayBuffer();
+    return { 
+      data: Buffer.from(buffer), 
+      headers: { 'content-type': fileResponse.headers.get('content-type') } 
+    };
   }
 
-  return { data: response.data, headers: response.headers };
+  const buffer = await response.arrayBuffer();
+  return { 
+    data: Buffer.from(buffer), 
+    headers: { 'content-type': response.headers.get('content-type') } 
+  };
 }
 
 export async function updateIssueDescription(userId, issueKey, descriptionAdf) {

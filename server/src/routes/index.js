@@ -465,7 +465,7 @@ apiRouter.get(
       if (headers['content-type']) {
         res.setHeader('Content-Type', headers['content-type']);
       }
-      data.pipe(res);
+      res.send(data);
     } catch (err) {
       console.error(`[Jira Attachment Proxy] Error:`, err.message);
       res.status(500).send('Failed to download Jira attachment');
