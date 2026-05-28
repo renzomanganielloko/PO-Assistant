@@ -28,6 +28,29 @@ export async function fetchJiraProjects(userId) {
   return (data.values || []).map(p => ({ id: p.id, key: p.key, name: p.name, projectTypeKey: p.projectTypeKey }));
 }
 
+export async function searchJiraUsers(userId, query) {
+  const client = await jiraClient(userId);
+  try {
+    const { data } = await client.get('/rest/api/3/users/search', {
+      params: {
+        query: query || '',
+        maxResults: 50
+      }
+    });
+    return (data || [])
+      .filter(u => u.active && u.accountType === 'atlassian')
+      .map(u => ({
+        id: u.accountId,
+        displayName: u.displayName,
+        emailAddress: u.emailAddress,
+        avatarUrl: u.avatarUrls?.['24x24'] || null
+      }));
+  } catch (e) {
+    console.error('Failed to search Jira users:', e.response?.data || e.message);
+    return [];
+  }
+}
+
 export async function getAssignedIssuesCount(userId) {
   const client = await jiraClient(userId);
   try {
@@ -90,12 +113,13 @@ export async function getJiraAlerts(userId) {
       jql,
       maxResults: 500,
       expand: "changelog",
-      fields: ["summary", "status", "issuetype", "created", "updated", "assignee", "reporter", "priority", "comment", "labels", "components", sprintField].filter(Boolean)
+      fields: ["summary", "status", "issuetype", "created", "updated", "assignee", "reporter", "priority", "comment", "labels", "components", "attachment", sprintField].filter(Boolean)
     });
 
     const now = new Date();
     const processedIssues = await Promise.all((data.issues || []).map(async issue => {
       const fields = issue.fields;
+      const attachments = fields.attachment || [];
       
       // Extraemos comentarios y cambios
       const comments = (fields.comment?.comments || []).map(c => ({ 
@@ -103,7 +127,8 @@ export async function getJiraAlerts(userId) {
         author: c.author, 
         type: 'comment', 
         body: c.body,
-        text: extractTextFromAdf(c.body)
+        text: extractTextFromAdf(c.body),
+        html: convertAdfToHtml(c.body, attachments)
       }));
 
       const lastComment = comments.length > 0 ? comments[comments.length - 1] : null;
@@ -115,8 +140,8 @@ export async function getJiraAlerts(userId) {
         items: h.items 
       }));
 
-      // Buscamos actividad relevante (menciones o asignaciones)
-      const mentionActivity = comments.find(c => {
+      // Buscamos actividad relevante (menciones o asignaciones) - última mención
+      const mentionActivity = comments.findLast(c => {
         const bodyStr = JSON.stringify(c.body);
         return bodyStr.includes(myAccountId) || (myDisplayName && bodyStr.includes(myDisplayName));
       });
@@ -194,6 +219,7 @@ export async function getJiraAlerts(userId) {
         authorId: rel?.author?.accountId,
         actionType, 
         commentText: commentText || (lastComment ? lastComment.text : ''),
+        commentHtml: rel?.type === 'comment' ? rel.html : (lastComment ? lastComment.html : ''),
         isAssignee: fields.assignee?.accountId === myAccountId,
         assigneeName: fields.assignee?.displayName,
         assigneeId: fields.assignee?.accountId,
@@ -281,6 +307,83 @@ function extractTextFromAdf(adf) {
   };
   adf.content.forEach(walk);
   return text.trim();
+}
+
+function convertAdfToHtml(node, attachments = []) {
+  if (!node) return '';
+  
+  if (Array.isArray(node)) {
+    return node.map(n => convertAdfToHtml(n, attachments)).join('');
+  }
+  
+  switch (node.type) {
+    case 'doc':
+      return convertAdfToHtml(node.content, attachments);
+      
+    case 'paragraph':
+      return `<p>${convertAdfToHtml(node.content, attachments)}</p>`;
+      
+    case 'text': {
+      let text = escapeHtml(node.text);
+      if (node.marks) {
+        node.marks.forEach(mark => {
+          if (mark.type === 'strong') text = `<strong>${text}</strong>`;
+          if (mark.type === 'em') text = `<em>${text}</em>`;
+          if (mark.type === 'strike') text = `<del>${text}</del>`;
+          if (mark.type === 'code') text = `<code>${text}</code>`;
+          if (mark.type === 'link') {
+            text = `<a href="${mark.attrs.href}" target="_blank" rel="noopener noreferrer" style="color: var(--ko-orange); font-weight: 700; text-decoration: underline;">${text}</a>`;
+          }
+        });
+      }
+      return text;
+    }
+    
+    case 'hardBreak':
+      return '<br />';
+      
+    case 'bulletList':
+      return `<ul>${convertAdfToHtml(node.content, attachments)}</ul>`;
+      
+    case 'orderedList':
+      return `<ol>${convertAdfToHtml(node.content, attachments)}</ol>`;
+      
+    case 'listItem':
+      return `<li>${convertAdfToHtml(node.content, attachments)}</li>`;
+      
+    case 'mention': {
+      const displayName = node.attrs.text || `@Usuario`;
+      return `<strong style="color: var(--ko-orange);">@${displayName.replace(/^@/, '')}</strong>`;
+    }
+    
+    case 'mediaSingle':
+      return `<div class="mediaSingle" style="text-align: center; margin: 12px 0;">${convertAdfToHtml(node.content, attachments)}</div>`;
+      
+    case 'media': {
+      const attachmentId = node.attrs.id;
+      const att = attachments.find(a => a.id === attachmentId);
+      if (att && att.content) {
+        return `<img src="${att.content}" alt="${escapeHtml(att.filename || 'Image')}" style="max-width: 100%; border-radius: 8px; display: block; margin: 0 auto; border: 1px solid var(--ko-border);" />`;
+      }
+      return `<span style="font-size: 11px; color: var(--ko-text-muted);">📸 [Imagen adjunta: ${escapeHtml(node.attrs.collection || 'Adjunto')}]</span>`;
+    }
+    
+    default:
+      if (node.content) {
+        return convertAdfToHtml(node.content, attachments);
+      }
+      return '';
+  }
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 export async function findExistingJiraIssue(userId, { projectKey, summary, trelloCardId }) {
@@ -380,32 +483,122 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export function toAdf(text, attachmentMap = {}) {
+export function toAdf(text) {
   if (!text) return { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [] }] };
-  const paragraphs = String(text).split(/\n\s*\n/);
-  const content = paragraphs.map(p => {
-    const nodes = []; const regex = /(!?\[([^\]]+)\]\(([^)]+?)(?:\s+"([^"]+)")?\))/g;
-    let last = 0; let m;
-    while ((m = regex.exec(p)) !== null) {
-      if (m.index > last) nodes.push({ type: 'text', text: p.substring(last, m.index) });
-      const isImg = m[0].startsWith('!');
-      if (isImg) {
-        const attId = attachmentMap[m[3]];
-        if (attId) nodes.push({ type: 'media_placeholder', attachmentId: attId, filename: m[2] });
-        else nodes.push({ type: 'text', text: `📸 [IMAGEN: ${m[2]}]`, marks: [{ type: 'strong' }] });
-      } else nodes.push({ type: 'text', text: m[2], marks: [{ type: 'link', attrs: { href: m[3] } }] });
-      last = regex.lastIndex;
+  
+  const lines = String(text).split('\n');
+  const content = [];
+  let currentList = null; 
+  
+  const flushList = () => {
+    if (currentList) {
+      content.push({
+        type: currentList.type,
+        content: currentList.items.map(itemText => ({
+          type: 'listItem',
+          content: [{
+            type: 'paragraph',
+            content: parseInlineText(itemText)
+          }]
+        }))
+      });
+      currentList = null;
     }
-    if (last < p.length) nodes.push({ type: 'text', text: p.substring(last) });
-    const res = []; let curr = [];
-    nodes.forEach(n => {
-      if (n.type === 'media_placeholder') {
-        if (curr.length > 0) res.push({ type: 'paragraph', content: curr });
-        curr = []; res.push({ type: 'mediaSingle', attrs: { layout: 'center' }, content: [{ type: 'media', attrs: { id: n.attachmentId, type: 'file', collection: '' } }] });
-      } else curr.push(n);
+  };
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      continue;
+    }
+    
+    // Bullet list match
+    const bulletMatch = line.match(/^(\s*)[-*+]\s+(.*)$/);
+    if (bulletMatch) {
+      if (currentList && currentList.type !== 'bulletList') {
+        flushList();
+      }
+      if (!currentList) {
+        currentList = { type: 'bulletList', items: [] };
+      }
+      currentList.items.push(bulletMatch[2]);
+      continue;
+    }
+    
+    // Ordered list match
+    const orderedMatch = line.match(/^(\s*)\d+\.\s+(.*)$/);
+    if (orderedMatch) {
+      if (currentList && currentList.type !== 'orderedList') {
+        flushList();
+      }
+      if (!currentList) {
+        currentList = { type: 'orderedList', items: [] };
+      }
+      currentList.items.push(orderedMatch[2]);
+      continue;
+    }
+    
+    // Normal paragraph
+    flushList();
+    content.push({
+      type: 'paragraph',
+      content: parseInlineText(trimmed)
     });
-    if (curr.length > 0) res.push({ type: 'paragraph', content: curr });
-    return res;
-  }).flat();
-  return { type: 'doc', version: 1, content: content.length ? content : [{ type: 'paragraph', content: [] }] };
+  }
+  
+  flushList();
+  
+  return {
+    type: 'doc',
+    version: 1,
+    content: content.length ? content : [{ type: 'paragraph', content: [] }]
+  };
+}
+
+function parseInlineText(text) {
+  if (!text) return [];
+  const nodes = [];
+  let index = 0;
+  
+  const regex = /(\*\*(.*?)\*\*|\[mention:(.*?)\]\((.*?)\)|\[(.*?)\]\((.*?)\))/g;
+  let match;
+  
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > index) {
+      nodes.push({ type: 'text', text: text.substring(index, match.index) });
+    }
+    
+    const fullMatch = match[1];
+    
+    if (fullMatch.startsWith('**')) {
+      nodes.push({
+        type: 'text',
+        text: match[2],
+        marks: [{ type: 'strong' }]
+      });
+    } else if (fullMatch.startsWith('[mention:')) {
+      nodes.push({
+        type: 'mention',
+        attrs: {
+          id: match[3],
+          text: match[4]
+        }
+      });
+    } else if (fullMatch.startsWith('[')) {
+      nodes.push({
+        type: 'text',
+        text: match[5],
+        marks: [{ type: 'link', attrs: { href: match[6] } }]
+      });
+    }
+    
+    index = regex.lastIndex;
+  }
+  
+  if (index < text.length) {
+    nodes.push({ type: 'text', text: text.substring(index) });
+  }
+  
+  return nodes;
 }

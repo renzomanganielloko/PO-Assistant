@@ -158,4 +158,5 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload)
     }),
+  jiraUsersSearch: (query) => request(`/jira/users/search?query=${encodeURIComponent(query || '')}`),
 };

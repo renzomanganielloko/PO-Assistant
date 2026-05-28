@@ -1673,12 +1673,17 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
   const [showStatus, setShowStatus] = useState(false);
   const [transitions, setTransitions] = useState([]);
   const [isReplying, setIsReplying] = useState(false);
-  const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
   const [isMovingStatus, setIsMovingStatus] = useState(false);
-  const [commentExpanded, setCommentExpanded] = useState(false);
   const [localStatus, setLocalStatus] = useState(issue.status);
   const [countdown, setCountdown] = useState(null);
+  const [showCommentModal, setShowCommentModal] = useState(false);
+
+  // Jira autocomplete state
+  const [members, setMembers] = useState([]);
+  const [mentionSearch, setMentionSearch] = useState(null);
+  const [activeMemberIndex, setActiveMemberIndex] = useState(0);
+  const editorRef = useRef(null);
 
   useEffect(() => {
     setLocalStatus(issue.status);
@@ -1696,6 +1701,107 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
     }, 1000);
     return () => clearTimeout(timer);
   }, [countdown, onRefresh]);
+
+  useEffect(() => {
+    if (isReplying) {
+      api.jiraUsersSearch('').then(res => {
+        if (res?.users) {
+          setMembers(res.users.map(u => ({
+            id: u.id || u.accountId,
+            username: u.displayName.toLowerCase().replace(/\s+/g, '.'),
+            fullName: u.displayName,
+            avatarUrl: u.avatarUrl
+          })));
+        }
+      }).catch(console.error);
+    }
+  }, [isReplying]);
+
+  const filteredMembers = useMemo(() => {
+    if (mentionSearch === null) return [];
+    const q = mentionSearch.query.toLowerCase();
+    return members.filter(m => 
+      m.username.toLowerCase().includes(q) || 
+      m.fullName.toLowerCase().includes(q)
+    ).slice(0, 8);
+  }, [members, mentionSearch]);
+
+  const execCommand = (command, value = null) => {
+    document.execCommand(command, false, value);
+    editorRef.current?.focus();
+  };
+
+  const handleInput = (e) => {
+    const text = e.target.innerText;
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+    
+    const range = selection.getRangeAt(0);
+    const textBeforeCursor = range.startContainer.textContent?.substring(0, range.startOffset) || '';
+    const lastAtMatch = textBeforeCursor.match(/@(\w*)$/);
+
+    if (lastAtMatch) {
+      setMentionSearch({
+        query: lastAtMatch[1],
+        startIndex: lastAtMatch.index,
+        node: range.startContainer,
+        offset: range.startOffset
+      });
+      setActiveMemberIndex(0);
+    } else {
+      setMentionSearch(null);
+    }
+  };
+
+  const selectMember = (member) => {
+    if (!mentionSearch) return;
+    const { node, offset, query } = mentionSearch;
+    const content = node.textContent;
+    const before = content.substring(0, offset - query.length - 1);
+    const after = content.substring(offset);
+    
+    node.textContent = before;
+    const mentionNode = document.createElement('strong');
+    mentionNode.setAttribute('data-mention-id', member.id);
+    mentionNode.style.color = 'var(--ko-orange)';
+    mentionNode.textContent = `@${member.username}`;
+    mentionNode.contentEditable = 'false';
+    
+    const spaceNode = document.createTextNode(' ');
+    
+    if (node.nextSibling) {
+      node.parentNode.insertBefore(mentionNode, node.nextSibling);
+      node.parentNode.insertBefore(spaceNode, mentionNode.nextSibling);
+    } else {
+      node.parentNode.appendChild(mentionNode);
+      node.parentNode.appendChild(spaceNode);
+    }
+
+    const range = document.createRange();
+    range.setStartAfter(spaceNode);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    
+    setMentionSearch(null);
+    editorRef.current?.focus();
+  };
+
+  const htmlToMarkdown = (html) => {
+    let md = html
+      .replace(/<strong data-mention-id="(.*?)"[^>]*>@(.*?)<\/strong>/g, '[mention:$1](@$2)')
+      .replace(/<b>(.*?)<\/b>|<strong>(.*?)<\/strong>/g, '**$1$2**')
+      .replace(/<i>(.*?)<\/i>|<em>(.*?)<\/em>/g, '*$1$2*')
+      .replace(/<div><br><\/div>/g, '\n')
+      .replace(/<div>(.*?)<\/div>/g, '\n$1')
+      .replace(/<br>/g, '\n')
+      .replace(/<img.*?src="(.*?)".*?>/g, '\n\n![]($1)\n\n')
+      .replace(/<ul>(.*?)<\/ul>/gs, (m, p1) => p1.replace(/<li>(.*?)<\/li>/g, '\n- $1'))
+      .replace(/<ol>(.*?)<\/ol>/gs, (m, p1) => p1.replace(/<li>(.*?)<\/li>/g, '\n1. $1'))
+      .replace(/<[^>]*>/g, '');
+    return md.trim();
+  };
 
   async function handleUpdateStatus(tid) {
     if (isMovingStatus || countdown !== null) return;
@@ -1724,11 +1830,12 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
 
   async function handleSendReply(e) {
     e.preventDefault();
-    if (!replyText.trim() || isSendingReply) return;
+    const markdown = htmlToMarkdown(editorRef.current.innerHTML);
+    if (!markdown || isSendingReply) return;
     setIsSendingReply(true);
     try {
-      await api.jiraAddComment(issue.key, replyText.trim());
-      setReplyText('');
+      await api.jiraAddComment(issue.key, markdown);
+      editorRef.current.innerHTML = '';
       setIsReplying(false);
       alert(language === 'es' ? 'Respuesta enviada a Jira con éxito.' : 'Reply sent to Jira successfully.');
       onRefresh();
@@ -1756,7 +1863,7 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
     <div className={`jiraCard ${issue.staleness} ${priorityClass}`}>
       <div className="cardHeader">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <span className="ticketKey">{issue.key} · {issue.author}</span>
+          <span className="ticketKey">{issue.key} · {issue.reporterName || issue.author || 'Sistema'}</span>
           <strong className="ticketTitle">{issue.summary}</strong>
         </div>
         <a href={issue.url} target="_blank" rel="noopener noreferrer" className="iconTextButton">
@@ -1791,30 +1898,33 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
 
       {issue.commentText && (
         <div className="commentPreview">
-          "{commentExpanded || issue.commentText.length <= 150 
-              ? issue.commentText 
-              : issue.commentText.substring(0, 150) + '...'}"
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+            <strong style={{ fontSize: '11.5px', color: 'var(--ko-orange)' }}>{issue.author}</strong>
+            <span style={{ fontSize: '10px', color: 'var(--ko-text-muted)' }}>{language === 'es' ? 'comentó:' : 'commented:'}</span>
+          </div>
+          <div style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+            "{issue.commentText.length <= 150 
+                ? issue.commentText 
+                : issue.commentText.substring(0, 150) + '...'}"
+          </div>
           {issue.commentText.length > 150 && (
             <button 
               type="button" 
               style={{
-                display: 'inline',
-                marginLeft: '5px',
-                padding: '2px 6px',
-                height: 'auto',
+                display: 'block',
+                marginTop: '6px',
+                padding: '0',
                 background: 'transparent',
                 border: 'none',
                 color: 'var(--ko-orange)',
                 cursor: 'pointer',
                 textDecoration: 'underline',
-                fontSize: '11px',
+                fontSize: '11.5px',
                 fontWeight: '700'
               }}
-              onClick={() => setCommentExpanded(!commentExpanded)}
+              onClick={() => setShowCommentModal(true)}
             >
-              {commentExpanded 
-                ? (language === 'es' ? 'Ver menos' : 'Show less') 
-                : (language === 'es' ? 'Ver comentario completo' : 'Show full comment')}
+              {language === 'es' ? 'Ver comentario completo' : 'Show full comment'}
             </button>
           )}
         </div>
@@ -1856,7 +1966,7 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
             <div className="mentionDropdown" style={{ bottom: '100%', left: 0, marginBottom: '5px', width: '200px' }}>
               {transitions.map(tr => (
                 <button key={tr.id} className="mentionItem" onClick={() => handleUpdateStatus(tr.id)}>
-                  {tr.name}
+                  {tr.name === 'Finalizar' ? 'Finalizada' : tr.name}
                 </button>
               ))}
             </div>
@@ -1869,33 +1979,105 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
       </div>
 
       {isReplying && (
-        <form onSubmit={handleSendReply} style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-          <input
-            type="text"
-            placeholder={language === 'es' ? "Escribe una respuesta..." : "Write a reply..."}
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            style={{
-              flex: 1,
-              height: '32px',
-              fontSize: '12px',
-              padding: '0 12px',
-              borderRadius: '6px',
-              border: '1px solid var(--ko-border)',
-              background: 'var(--ko-input-bg)',
-              color: 'var(--ko-text)'
-            }}
-            required
-          />
-          <button 
-            type="submit" 
-            className="primarySmall" 
-            style={{ height: '32px', padding: '0 12px', borderRadius: '6px' }}
-            disabled={!replyText.trim() || isSendingReply}
-          >
-            {isSendingReply ? <RefreshCw size={12} className="spin" /> : <Send size={12} />}
-          </button>
+        <form className="replyForm" onSubmit={handleSendReply} style={{ marginTop: '12px' }}>
+          <div className="editorToolbar">
+            <button type="button" onClick={() => execCommand('bold')} title="Negrita"><Bold size={16} /></button>
+            <button type="button" onClick={() => execCommand('insertUnorderedList')} title="Bullets"><List size={16} /></button>
+            <button type="button" onClick={() => execCommand('insertOrderedList')} title="Lista numerada"><ListOrdered size={16} /></button>
+          </div>
+          <div className="mentionWrapper">
+            <div 
+              ref={editorRef}
+              contentEditable
+              className="richEditor"
+              onInput={handleInput}
+              onKeyDown={(e) => {
+                if (mentionSearch && filteredMembers.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setActiveMemberIndex(i => (i + 1) % filteredMembers.length);
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setActiveMemberIndex(i => (i - 1 + filteredMembers.length) % filteredMembers.length);
+                  } else if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    selectMember(filteredMembers[activeMemberIndex]);
+                  } else if (e.key === 'Escape') {
+                    setMentionSearch(null);
+                  }
+                }
+              }}
+            />
+            {mentionSearch && filteredMembers.length > 0 && (
+              <div className="mentionDropdown" style={{ width: '100%', bottom: '100%' }}>
+                {filteredMembers.map((member, index) => (
+                  <button
+                    key={member.id}
+                    type="button"
+                    className={index === activeMemberIndex ? 'mentionItem active' : 'mentionItem'}
+                    onClick={() => selectMember(member)}
+                  >
+                    <User size={14} />
+                    <div className="memberInfo">
+                      <strong>{member.fullName}</strong>
+                      <small>@{member.username}</small>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="replyActions" style={{ marginTop: '8px' }}>
+            <button type="button" className="ghost" onClick={() => setIsReplying(false)}>
+              {language === 'es' ? 'Cancelar' : 'Cancel'}
+            </button>
+            <button type="submit" className="primarySmall" disabled={isSendingReply}>
+              {language === 'es' ? 'Responder' : 'Reply'}
+            </button>
+          </div>
         </form>
+      )}
+
+      {showCommentModal && (
+        <div className="modalOverlay" onClick={() => setShowCommentModal(false)}>
+          <div className="modalContent" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '650px', width: '100%' }}>
+            <div className="modalHeader">
+              <h2>{language === 'es' ? 'Comentario completo' : 'Full comment'}</h2>
+              <button className="closeButton" onClick={() => setShowCommentModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modalBody" style={{ maxHeight: '60vh', overflowY: 'auto', padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', borderBottom: '1px solid var(--ko-border)', paddingBottom: '12px' }}>
+                <div className="userAvatar" style={{ width: '32px', height: '32px', fontSize: '13px' }}>
+                  {issue.author.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <strong style={{ fontSize: '14px' }}>{issue.author}</strong>
+                  <div style={{ fontSize: '11px', color: 'var(--ko-text-muted)', marginTop: '2px' }}>
+                    {new Date(issue.updated).toLocaleString(language === 'es' ? 'es-AR' : 'en-US')}
+                  </div>
+                </div>
+              </div>
+              <div 
+                className="fullCommentHtml"
+                dangerouslySetInnerHTML={{ __html: issue.commentHtml }}
+                style={{
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  color: 'var(--ko-text)',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word'
+                }}
+              />
+            </div>
+            <div className="modalFooter" style={{ padding: '16px 24px' }}>
+              <button className="primarySmall" onClick={() => setShowCommentModal(false)}>
+                {language === 'es' ? 'Cerrar' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

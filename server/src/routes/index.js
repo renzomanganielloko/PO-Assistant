@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { getCredentialStatus, saveCredentials, loadCredentials } from '../storage/credentialsStore.js';
 import { fetchBoards, fetchCards, fetchLists, validateTrelloCredentials, fetchBoardMembers, uploadFileToCard } from '../services/trelloService.js';
-import { fetchJiraProjects, getJiraAlerts, getAssignedIssuesCount, addJiraComment, updateIssueStatus, assignIssue, getIssueTransitions, createJiraRemoteLink } from '../services/jiraService.js';
+import { fetchJiraProjects, getJiraAlerts, getAssignedIssuesCount, addJiraComment, updateIssueStatus, assignIssue, getIssueTransitions, createJiraRemoteLink, searchJiraUsers } from '../services/jiraService.js';
 import { normalizeTrelloCard } from '../services/mappingService.js';
 import { selectSyncCandidates } from '../services/syncRules.js';
 import { findAutomationByBoardId, getAutomation, listAutomations, upsertAutomation } from '../storage/automationStore.js';
@@ -325,6 +325,15 @@ apiRouter.get(
   '/jira/projects',
   asyncHandler(async (req, res) => {
     res.json({ projects: await fetchJiraProjects(req.user._id) });
+  })
+);
+
+apiRouter.get(
+  '/jira/users/search',
+  asyncHandler(async (req, res) => {
+    const query = typeof req.query.query === 'string' ? req.query.query : '';
+    const users = await searchJiraUsers(req.user._id, query);
+    res.json({ users });
   })
 );
 
