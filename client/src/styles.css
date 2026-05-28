@@ -2215,3 +2215,47 @@ button:disabled {
   font-weight: 600;
   font-size: 11px;
 }
+
+.remoteLinksList {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.remoteLinkItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--ko-secondary-btn);
+  color: var(--ko-text-muted);
+  transition: all 0.2s;
+}
+
+.remoteLinkItem:hover {
+  background: var(--ko-secondary-btn-hover);
+  color: var(--ko-text);
+}
+
+.remoteLinkItem.is-pr {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.remoteLinkItem.is-pr:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.remoteLinkItem.is-workspace {
+  color: var(--ko-orange);
+  background: rgba(250, 90, 30, 0.1);
+}
+
+.remoteLinkItem.is-workspace:hover {
+  background: rgba(250, 90, 30, 0.2);
+}

@@ -83,7 +83,7 @@ export async function getJiraAlerts(userId) {
     projectFilter = `project in (${projectKeys.map(k => `"${k}"`).join(', ')}) AND `;
   }
 
-  const jql = `${projectFilter}(status in ("En Revisión", "Listo para Deploy", "Bloqueado", "En Progreso", "In Review", "Ready for Deploy", "Ready for deployment", "Blocked", "In Progress", "Ready for Release") OR assignee = currentUser() OR text ~ "currentUser()") ORDER BY updated DESC`;
+  const jql = `${projectFilter}(status in ("En Revisión", "Listo para Deploy", "Bloqueado", "En Progreso", "In Review", "Ready for Deploy", "Ready for deployment", "Blocked", "In Progress", "Ready for Release")) AND (reporter = currentUser() OR assignee = currentUser()) ORDER BY updated DESC`;
   
   try {
     const { data } = await client.post('/rest/api/3/search/jql', {
@@ -230,6 +230,13 @@ export async function getJiraAlerts(userId) {
     console.error('Jira Alerts fetch failed:', e.response?.data || e.message);
     return { alerts: [], dashboard: {}, stats: {} };
   }
+}
+
+export async function addJiraComment(userId, issueKey, text) {
+  const client = await jiraClient(userId);
+  await client.post(`/rest/api/3/issue/${issueKey}/comment`, {
+    body: toAdf(text)
+  });
 }
 
 export async function updateIssueStatus(userId, issueKey, transitionId) {

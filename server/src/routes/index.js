@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { getCredentialStatus, saveCredentials, loadCredentials } from '../storage/credentialsStore.js';
 import { fetchBoards, fetchCards, fetchLists, validateTrelloCredentials, fetchBoardMembers, uploadFileToCard } from '../services/trelloService.js';
-import { fetchJiraProjects, getJiraAlerts, getAssignedIssuesCount } from '../services/jiraService.js';
+import { fetchJiraProjects, getJiraAlerts, getAssignedIssuesCount, addJiraComment, updateIssueStatus, assignIssue, getIssueTransitions, createJiraRemoteLink } from '../services/jiraService.js';
 import { normalizeTrelloCard } from '../services/mappingService.js';
 import { selectSyncCandidates } from '../services/syncRules.js';
 import { findAutomationByBoardId, getAutomation, listAutomations, upsertAutomation } from '../storage/automationStore.js';
@@ -412,6 +412,27 @@ apiRouter.get(
   asyncHandler(async (req, res) => {
     const transitions = await getIssueTransitions(req.user._id, req.params.key);
     res.json({ transitions });
+  })
+);
+
+apiRouter.post(
+  '/jira/issue/:key/comment',
+  asyncHandler(async (req, res) => {
+    const { text } = z.object({ text: z.string().min(1) }).parse(req.body);
+    await addJiraComment(req.user._id, req.params.key, text);
+    res.status(204).send();
+  })
+);
+
+apiRouter.post(
+  '/jira/issue/:key/link',
+  asyncHandler(async (req, res) => {
+    const { title, url } = z.object({
+      title: z.string().min(1),
+      url: z.string().url()
+    }).parse(req.body);
+    const result = await createJiraRemoteLink(req.user._id, req.params.key, { title, url });
+    res.json(result);
   })
 );
 

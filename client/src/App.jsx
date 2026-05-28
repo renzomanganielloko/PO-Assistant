@@ -1490,6 +1490,13 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
   const [showAssign, setShowAssign] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   const [transitions, setTransitions] = useState([]);
+  const [isReplying, setIsReplying] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [isSendingReply, setIsSendingReply] = useState(false);
+  const [showAddLink, setShowAddLink] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkTitle, setLinkTitle] = useState('');
+  const [isAddingLink, setIsAddingLink] = useState(false);
 
   async function handleUpdateStatus(tid) {
     await api.jiraUpdateStatus(issue.key, tid);
@@ -1500,6 +1507,39 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
     if (transitions.length > 0) return;
     const res = await api.jiraTransitions(issue.key);
     if (res?.transitions) setTransitions(res.transitions);
+  }
+
+  async function handleSendReply(e) {
+    e.preventDefault();
+    if (!replyText.trim() || isSendingReply) return;
+    setIsSendingReply(true);
+    try {
+      await api.jiraAddComment(issue.key, replyText.trim());
+      setReplyText('');
+      setIsReplying(false);
+      onRefresh();
+    } catch (err) {
+      alert(err.message || 'Error al enviar comentario');
+    } finally {
+      setIsSendingReply(false);
+    }
+  }
+
+  async function handleSaveLink(e) {
+    e.preventDefault();
+    if (!linkUrl.trim() || !linkTitle.trim() || isAddingLink) return;
+    setIsAddingLink(true);
+    try {
+      await api.jiraAddLink(issue.key, { title: linkTitle.trim(), url: linkUrl.trim() });
+      setLinkUrl('');
+      setLinkTitle('');
+      setShowAddLink(false);
+      onRefresh();
+    } catch (err) {
+      alert(err.message || 'Error al agregar link');
+    } finally {
+      setIsAddingLink(false);
+    }
   }
 
   const copyUpdate = () => {
@@ -1549,10 +1589,17 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
       )}
 
       {issue.remoteLinks?.length > 0 && (
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {issue.remoteLinks.filter(l => l.isPR).map((link, idx) => (
-            <a key={idx} href={link.url} target="_blank" rel="noopener noreferrer" className="prBadge">
-              <Bot size={12} /> PR
+        <div className="remoteLinksList">
+          {issue.remoteLinks.map((link, idx) => (
+            <a 
+              key={idx} 
+              href={link.url} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className={`remoteLinkItem ${link.isPR ? 'is-pr' : 'is-workspace'}`}
+            >
+              {link.isPR ? <Bot size={12} /> : <ExternalLink size={12} />}
+              <span>{link.title || (link.isPR ? 'PR' : 'Workspace')}</span>
             </a>
           ))}
         </div>
@@ -1577,7 +1624,100 @@ function JiraTicketCard({ issue, t, language, onRefresh }) {
             </div>
           )}
         </div>
+
+        <button className="actionBtn" onClick={() => setIsReplying(!isReplying)}>
+          <MessageSquare size={14} /> {language === 'es' ? 'Responder' : 'Reply'}
+        </button>
+
+        <button className="actionBtn" onClick={() => setShowAddLink(!showAddLink)}>
+          <PlusCircle size={14} /> {language === 'es' ? 'Link Workspace' : 'Add Link'}
+        </button>
       </div>
+
+      {isReplying && (
+        <form onSubmit={handleSendReply} style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+          <input
+            type="text"
+            placeholder={language === 'es' ? "Escribe una respuesta..." : "Write a reply..."}
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            style={{
+              flex: 1,
+              height: '32px',
+              fontSize: '12px',
+              padding: '0 12px',
+              borderRadius: '6px',
+              border: '1px solid var(--ko-border)',
+              background: 'var(--ko-input-bg)',
+              color: 'var(--ko-text)'
+            }}
+            required
+          />
+          <button 
+            type="submit" 
+            className="primarySmall" 
+            style={{ height: '32px', padding: '0 12px', borderRadius: '6px' }}
+            disabled={!replyText.trim() || isSendingReply}
+          >
+            {isSendingReply ? <RefreshCw size={12} className="spin" /> : <Send size={12} />}
+          </button>
+        </form>
+      )}
+
+      {showAddLink && (
+        <form onSubmit={handleSaveLink} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px', background: 'var(--ko-bg-header)', padding: '10px', borderRadius: '6px' }}>
+          <input
+            type="text"
+            placeholder={language === 'es' ? "Título del link (ej: Workspace Figma)" : "Link Title (e.g. Workspace Figma)"}
+            value={linkTitle}
+            onChange={(e) => setLinkTitle(e.target.value)}
+            style={{
+              height: '32px',
+              fontSize: '12px',
+              padding: '0 12px',
+              borderRadius: '6px',
+              border: '1px solid var(--ko-border)',
+              background: 'var(--ko-input-bg)',
+              color: 'var(--ko-text)'
+            }}
+            required
+          />
+          <input
+            type="url"
+            placeholder="https://..."
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            style={{
+              height: '32px',
+              fontSize: '12px',
+              padding: '0 12px',
+              borderRadius: '6px',
+              border: '1px solid var(--ko-border)',
+              background: 'var(--ko-input-bg)',
+              color: 'var(--ko-text)'
+            }}
+            required
+          />
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <button 
+              type="button" 
+              className="ghost" 
+              style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer' }} 
+              onClick={() => setShowAddLink(false)}
+            >
+              {language === 'es' ? 'Cancelar' : 'Cancel'}
+            </button>
+            <button 
+              type="submit" 
+              className="primarySmall" 
+              style={{ height: '28px', padding: '0 12px', borderRadius: '6px', fontSize: '11px' }}
+              disabled={isAddingLink}
+            >
+              {isAddingLink ? <RefreshCw size={12} className="spin" /> : (language === 'es' ? 'Agregar' : 'Add')}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

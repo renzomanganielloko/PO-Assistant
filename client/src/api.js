@@ -97,6 +97,16 @@ export const api = {
       body: JSON.stringify({ accountId })
     }),
   jiraTransitions: (key) => request(`/jira/issue/${encodeURIComponent(key)}/transitions`),
+  jiraAddComment: (key, text) =>
+    request(`/jira/issue/${encodeURIComponent(key)}/comment`, {
+      method: 'POST',
+      body: JSON.stringify({ text })
+    }),
+  jiraAddLink: (key, { title, url }) =>
+    request(`/jira/issue/${encodeURIComponent(key)}/link`, {
+      method: 'POST',
+      body: JSON.stringify({ title, url })
+    }),
   markJiraAlertAsRead: (id) =>
     request('/jira/alerts/read', {
       method: 'POST',
