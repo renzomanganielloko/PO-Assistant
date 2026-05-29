@@ -16,13 +16,14 @@ export function errorHandler(error, _req, res, _next) {
   if (error.response) {
     const upstreamMessage = formatUpstreamMessage(error.response.data);
     const source = integrationSource(error.response.config?.baseURL);
+    console.error(`[Upstream Error] Source: ${source}, Status: ${error.response.status}, Data:`, error.response.data);
     return res.status(error.response.status || 502).json({
       message: `${source} rejected the request: ${upstreamMessage}`,
       details: upstreamMessage
     });
   }
 
-  console.error(error);
+  console.error('UNEXPECTED ERROR:', error);
   return res.status(500).json({ message: 'Unexpected server error.' });
 }
 

@@ -10,7 +10,8 @@ export const translations = {
       sync: 'Sync Jira',
       alerts: 'Alertas Trello',
       jiraAlerts: 'Alertas Jira',
-      profile: 'Mi Perfil'
+      profile: 'Mi Perfil',
+      mail: 'Correos'
     },
     settings: {
       trelloApiKey: 'Trello API Key',
@@ -130,6 +131,31 @@ export const translations = {
       label: 'Idioma',
       es: 'ES',
       en: 'EN'
+    },
+    gmail: {
+      noAuthUrl: 'No se pudo obtener la URL de autenticación.',
+      connectGmail: 'Conectar Gmail',
+      unread: 'No leídos',
+      blockers: 'Blockers',
+      clients: 'Mensajes de Clientes',
+      deploys: 'Deploys',
+      opsCenter: 'Centro de Operaciones de Correo',
+      search: 'Buscar correos...',
+      disconnect: '¿Desconectar Gmail?',
+      filters: {
+        all: 'Todos',
+        needsAttention: 'Requiere atención',
+        clientMessages: 'Mensajes de clientes',
+        deploys: 'Deploys y Lanzamientos',
+        blocker: 'Bloqueadores',
+        followUp: 'Seguimiento'
+      },
+      refresh: 'Cargando correos',
+      aiButton: 'Resumir con IA',
+      viewSummary: 'Ver Resumen',
+      aiSummary: 'Resumen de IA',
+      hide: 'Ocultar',
+      noEmails: 'No se encontraron correos en esta categoría.'
     }
   },
   en: {
@@ -143,7 +169,8 @@ export const translations = {
       sync: 'Sync Jira',
       alerts: 'Trello Alerts',
       jiraAlerts: 'Jira Alerts',
-      profile: 'My Profile'
+      profile: 'My Profile',
+      mail: 'Mail'
     },
     settings: {
       trelloApiKey: 'Trello API Key',
@@ -263,6 +290,31 @@ export const translations = {
       label: 'Language',
       es: 'ES',
       en: 'EN'
+    },
+    gmail: {
+      noAuthUrl: 'Could not retrieve authentication URL.',
+      connectGmail: 'Connect Gmail',
+      unread: 'Unread',
+      blockers: 'Blockers',
+      clients: 'Client Messages',
+      deploys: 'Deploys',
+      opsCenter: 'Email Operations Center',
+      search: 'Search emails...',
+      disconnect: 'Disconnect Gmail?',
+      filters: {
+        all: 'All',
+        needsAttention: 'Needs attention',
+        clientMessages: 'Client messages',
+        deploys: 'Deploys & Releases',
+        blocker: 'Blockers',
+        followUp: 'Follow-up'
+      },
+      refresh: 'Loading emails',
+      aiButton: 'Summarize with AI',
+      viewSummary: 'View Summary',
+      aiSummary: 'AI Summary',
+      hide: 'Hide',
+      noEmails: 'No emails found in this category.'
     }
   }
 };
