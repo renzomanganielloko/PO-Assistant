@@ -173,7 +173,12 @@ apiRouter.post(
   asyncHandler(async (req, res) => {
     const query = z.object({
       questionId: z.string().optional(),
-      text: z.string().optional().default('')
+      text: z.string().optional().default(''),
+      history: z.array(z.object({
+        role: z.string(),
+        text: z.string(),
+        details: z.array(z.string()).optional()
+      })).optional()
     }).parse(req.body);
 
     res.json(await answerAssistantQuestion(req.user._id, query));

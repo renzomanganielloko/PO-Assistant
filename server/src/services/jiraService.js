@@ -474,20 +474,28 @@ export async function downloadJiraAttachmentStream(userId, attachmentId) {
   const response = await fetch(url, {
     method: 'GET',
     headers: {
-      'Authorization': authHeader,
-      'Accept': 'application/json'
+      'Authorization': authHeader
     },
     redirect: 'manual'
   });
 
-  if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
+  if (response.status >= 300 && response.status < 400) {
     const redirectUrl = response.headers.get('location');
-    const fileResponse = await fetch(redirectUrl);
-    const buffer = await fileResponse.arrayBuffer();
-    return { 
-      data: Buffer.from(buffer), 
-      headers: { 'content-type': fileResponse.headers.get('content-type') } 
-    };
+    if (redirectUrl) {
+      const fileResponse = await fetch(redirectUrl);
+      if (!fileResponse.ok) {
+        throw new Error(`Failed to download redirected attachment: ${fileResponse.statusText}`);
+      }
+      const buffer = await fileResponse.arrayBuffer();
+      return { 
+        data: Buffer.from(buffer), 
+        headers: { 'content-type': fileResponse.headers.get('content-type') } 
+      };
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch attachment from Jira: ${response.statusText}`);
   }
 
   const buffer = await response.arrayBuffer();

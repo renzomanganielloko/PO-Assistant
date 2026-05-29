@@ -62,9 +62,30 @@ export const assistantQuestions = [
   { id: 'dark-mode-info', categoryId: 'cat-general', text: '¿El modo oscuro es automático?' }
 ];
 
-export async function answerAssistantQuestion(userId, { questionId, text = '' }) {
+export async function answerAssistantQuestion(userId, { questionId, text = '', history = [] }) {
   const cleanText = text.trim();
   const normalizedText = normalize(cleanText);
+
+  // 0. Handle follow-up corrections (e.g. "solo 3 tareas te pedí", "solo 3 de esas", etc.)
+  if (history && history.length > 0) {
+    const isSoloCorrection = matchesPatterns(normalizedText, ['solo', 'sólo', 'te pedi', 'te pedí', 'solamente', 'dije', 'mostrame', 'dame', 'pedi']) && 
+                            /\b(\d+|una|uno|un|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/.test(normalizedText);
+    
+    if (isSoloCorrection) {
+      // Find the last assistant message that had details
+      const lastAssistantMsg = [...history].reverse().find(m => m.role === 'assistant' && m.details && m.details.length > 0);
+      if (lastAssistantMsg) {
+        const queryParams = parseQueryParams(cleanText);
+        const limit = queryParams.limit || 3; // fallback to 3
+        const slicedDetails = lastAssistantMsg.details.slice(0, limit);
+        
+        return {
+          answer: `Mil disculpas, tenés razón. Aquí tenés solo las ${limit} tareas solicitadas:`,
+          details: slicedDetails
+        };
+      }
+    }
+  }
 
   // 1. Greetings & Chit-chat
   if (isGreeting(normalizedText)) {
@@ -104,26 +125,26 @@ export async function answerAssistantQuestion(userId, { questionId, text = '' })
 
   // 3. User's assigned tasks
   if (matchesPatterns(normalizedText, ['mi tarea', 'mis tarea', 'mis asignacion', 'mi asignacion', 'que tengo asignado', 'mis tickets', 'que tengo que hacer', 'que tareas tengo', 'mis tareas'])) {
-    return await answerMyAssignments(userId);
+    return await answerMyAssignments(userId, cleanText);
   }
 
   // 4. Tasks reported by user
   if (matchesPatterns(normalizedText, ['informadas por mi', 'tareas que reporte', 'mis reportes', 'creadas por mi', 'yo informe', 'yo cree', 'mis creadas'])) {
-    return await answerMyReportedIssues(userId);
+    return await answerMyReportedIssues(userId, cleanText);
   }
 
   // 5. Query tasks by status
   if (matchesPatterns(normalizedText, ['revisio', 'review', 'para revisar', 'en revisio'])) {
-    return await answerTasksByStatus(userId, ['En Revisión', 'In Review', 'revisio']);
+    return await answerTasksByStatus(userId, ['En Revisión', 'In Review', 'revisio'], cleanText);
   }
   if (matchesPatterns(normalizedText, ['listas para deploy', 'listo para deploy', 'deploy', 'cola de deploy', 'listos para deploy'])) {
-    return await answerTasksByStatus(userId, ['Listo para Deploy', 'Ready for Deploy', 'Ready for deployment', 'Ready for Release', 'deploy']);
+    return await answerTasksByStatus(userId, ['Listo para Deploy', 'Ready for Deploy', 'Ready for deployment', 'Ready for Release', 'deploy'], cleanText);
   }
   if (matchesPatterns(normalizedText, ['bloquead', 'stuck', 'trabad'])) {
-    return await answerTasksByStatus(userId, ['Bloqueado', 'Blocked']);
+    return await answerTasksByStatus(userId, ['Bloqueado', 'Blocked'], cleanText);
   }
   if (matchesPatterns(normalizedText, ['en progreso', 'haciendo', 'in progress', 'desarrollo', 'progreso'])) {
-    return await answerTasksByStatus(userId, ['En Progreso', 'In Progress']);
+    return await answerTasksByStatus(userId, ['En Progreso', 'In Progress'], cleanText);
   }
 
   // 6. Emails / Gmail unread count
@@ -154,7 +175,7 @@ export async function answerAssistantQuestion(userId, { questionId, text = '' })
   // 11. Search tasks by assignee name (e.g. "que tiene andres", "tareas de renzo")
   const personMatch = detectPersonInQuery(normalizedText);
   if (personMatch) {
-    return await answerTasksByAssignee(userId, personMatch);
+    return await answerTasksByAssignee(userId, personMatch, cleanText);
   }
 
   // 12. Fuzzy fallback to predefined QA database
@@ -164,7 +185,7 @@ export async function answerAssistantQuestion(userId, { questionId, text = '' })
   }
 
   // 13. General keyword search across the titles of Trello and Jira elements
-  return await searchAppContent(userId, cleanText);
+  return await searchAppContent(userId, cleanText, cleanText);
 }
 
 function isGreeting(text) {
@@ -201,7 +222,7 @@ function detectPersonInQuery(normalizedText) {
   return null;
 }
 
-async function answerTasksByAssignee(userId, nameQuery) {
+async function answerTasksByAssignee(userId, nameQuery, queryText) {
   try {
     const jiraData = await getJiraAlerts(userId);
     const issues = jiraData.dashboard?.allOpen || [];
@@ -217,9 +238,15 @@ async function answerTasksByAssignee(userId, nameQuery) {
       };
     }
 
+    const totalCount = matched.length;
+    const modified = applyQueryModifiers(matched, parseQueryParams(queryText || ''));
+    const countStr = totalCount !== modified.length
+      ? `${modified.length} de las ${totalCount} tarea(s)`
+      : `${totalCount} tarea(s)`;
+
     return {
-      answer: `Encontré ${matched.length} tarea(s) asignada(s) a **${matched[0].assigneeName}**:`,
-      details: matched.map(i => `${i.key} [${i.status}]: ${i.summary}`)
+      answer: `Encontré ${countStr} asignada(s) a **${matched[0].assigneeName}**:`,
+      details: modified.map(i => `${i.key} [${i.status}]: ${i.summary}`)
     };
   } catch (error) {
     return {
@@ -229,7 +256,7 @@ async function answerTasksByAssignee(userId, nameQuery) {
   }
 }
 
-async function answerTasksByStatus(userId, statusNames) {
+async function answerTasksByStatus(userId, statusNames, queryText) {
   try {
     const jiraData = await getJiraAlerts(userId);
     const issues = jiraData.dashboard?.allOpen || [];
@@ -244,9 +271,15 @@ async function answerTasksByStatus(userId, statusNames) {
       };
     }
 
+    const totalCount = matched.length;
+    const modified = applyQueryModifiers(matched, parseQueryParams(queryText || ''));
+    const countStr = totalCount !== modified.length
+      ? `${modified.length} de las ${totalCount} tarea(s)`
+      : `${totalCount} tarea(s)`;
+
     return {
-      answer: `Hay ${matched.length} tarea(s) en estado **${matched[0].status}**:`,
-      details: matched.map(i => `${i.key} (Asignado a: ${i.assigneeName || 'Sin asignar'}): ${i.summary}`)
+      answer: `Hay ${countStr} en estado **${matched[0].status}**:`,
+      details: modified.map(i => `${i.key} (Asignado a: ${i.assigneeName || 'Sin asignar'}): ${i.summary}`)
     };
   } catch (error) {
     return {
@@ -286,7 +319,7 @@ async function answerSpecificJiraTicket(userId, key) {
   }
 }
 
-async function answerMyAssignments(userId) {
+async function answerMyAssignments(userId, queryText) {
   try {
     const jiraData = await getJiraAlerts(userId);
     const assigned = jiraData.dashboard?.myAssignments || [];
@@ -296,9 +329,16 @@ async function answerMyAssignments(userId) {
         details: []
       };
     }
+
+    const totalCount = assigned.length;
+    const modified = applyQueryModifiers(assigned, parseQueryParams(queryText || ''));
+    const countStr = totalCount !== modified.length
+      ? `${modified.length} de tus ${totalCount} tarea(s)`
+      : `${totalCount} tarea(s)`;
+
     return {
-      answer: `Tenés ${assigned.length} tarea(s) asignada(s) en Jira:`,
-      details: assigned.map(i => `${i.key} [${i.status}]: ${i.summary}`)
+      answer: `Tenés ${countStr} asignada(s) en Jira:`,
+      details: modified.map(i => `${i.key} [${i.status}]: ${i.summary}`)
     };
   } catch (error) {
     return {
@@ -308,7 +348,7 @@ async function answerMyAssignments(userId) {
   }
 }
 
-async function answerMyReportedIssues(userId) {
+async function answerMyReportedIssues(userId, queryText) {
   try {
     const jiraData = await getJiraAlerts(userId);
     const reported = jiraData.dashboard?.reportedByMe || [];
@@ -318,9 +358,16 @@ async function answerMyReportedIssues(userId) {
         details: []
       };
     }
+
+    const totalCount = reported.length;
+    const modified = applyQueryModifiers(reported, parseQueryParams(queryText || ''));
+    const countStr = totalCount !== modified.length
+      ? `${modified.length} de las ${totalCount} tarea(s)`
+      : `${totalCount} tarea(s)`;
+
     return {
-      answer: `Informaste ${reported.length} tarea(s) abierta(s) en Jira:`,
-      details: reported.map(i => `${i.key} [${i.status}]: ${i.summary}`)
+      answer: `Informaste ${countStr} abierta(s) en Jira:`,
+      details: modified.map(i => `${i.key} [${i.status}]: ${i.summary}`)
     };
   } catch (error) {
     return {
@@ -352,7 +399,7 @@ async function answerAllAlerts(userId) {
   }
 }
 
-async function searchAppContent(userId, text) {
+async function searchAppContent(userId, text, queryText) {
   try {
     const query = normalize(text);
     if (query.length < 3) {
@@ -377,9 +424,15 @@ async function searchAppContent(userId, text) {
       };
     }
 
+    const totalCount = matchingJira.length;
+    const modified = applyQueryModifiers(matchingJira, parseQueryParams(queryText || text));
+    const countStr = totalCount !== modified.length
+      ? `${modified.length} de las ${totalCount} tarea(s)`
+      : `${totalCount} tarea(s)`;
+
     return {
-      answer: `Encontré las siguientes tareas de Jira relacionadas con "${text}":`,
-      details: matchingJira.map(i => `${i.key} [${i.status}] - Asignado a: ${i.assigneeName || 'Sin asignar'}: ${i.summary}`)
+      answer: `Encontré las siguientes ${countStr} de Jira relacionadas con "${text}":`,
+      details: modified.map(i => `${i.key} [${i.status}] - Asignado a: ${i.assigneeName || 'Sin asignar'}: ${i.summary}`)
     };
   } catch (error) {
     return {
@@ -751,4 +804,68 @@ async function handlePredefinedQuestion(userId, questionId) {
     default:
       return { answer: 'Pregunta no implementada.', details: [] };
   }
+}
+
+function parseQueryParams(text) {
+  const normalized = normalize(text);
+  
+  // 1. Extract limit
+  let limit = null;
+  const numberMap = {
+    'una': 1, 'uno': 1, 'un': 1, '1': 1,
+    'dos': 2, '2': 2,
+    'tres': 3, '3': 3,
+    'cuatro': 4, '4': 4,
+    'cinco': 5, '5': 5,
+    'seis': 6, '6': 6,
+    'siete': 7, '7': 7,
+    'ocho': 8, '8': 8,
+    'nueve': 9, '9': 9,
+    'diez': 10, '10': 10
+  };
+  
+  const words = normalized.split(/\s+/);
+  for (const word of words) {
+    if (numberMap[word] !== undefined) {
+      limit = numberMap[word];
+      break;
+    }
+  }
+  
+  if (!limit) {
+    const match = normalized.match(/\b(\d+)\b/);
+    if (match) {
+      limit = parseInt(match[1], 10);
+    }
+  }
+  
+  // 2. Extract sorting
+  let sortBy = 'updated';
+  let sortOrder = 'desc'; // default: most recent
+  
+  if (normalized.includes('antigua') || normalized.includes('vieja') || normalized.includes('primeras') || normalized.includes('primero')) {
+    sortOrder = 'asc';
+  } else if (normalized.includes('reciente') || normalized.includes('ultima') || normalized.includes('ultimo') || normalized.includes('nuevas') || normalized.includes('nueva')) {
+    sortOrder = 'desc';
+  }
+  
+  return { limit, sortBy, sortOrder };
+}
+
+function applyQueryModifiers(issues, { limit, sortBy, sortOrder }) {
+  let result = [...issues];
+  
+  // Sort
+  result.sort((a, b) => {
+    const valA = new Date(a[sortBy] || a.updated || 0);
+    const valB = new Date(b[sortBy] || b.updated || 0);
+    return sortOrder === 'asc' ? valA - valB : valB - valA;
+  });
+  
+  // Limit
+  if (limit && limit > 0) {
+    result = result.slice(0, limit);
+  }
+  
+  return result;
 }

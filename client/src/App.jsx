@@ -834,7 +834,12 @@ function PositoChat() {
     try {
       const result = await api.assistantQuery({
         questionId: question?.id,
-        text
+        text,
+        history: messages.slice(-10).map(m => ({
+          role: m.role,
+          text: m.text,
+          details: m.details || []
+        }))
       });
       setMessages(current => [
         ...current,
