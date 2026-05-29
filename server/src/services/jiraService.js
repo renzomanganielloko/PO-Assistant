@@ -380,8 +380,11 @@ function convertAdfToHtml(node, attachments = [], state = { mediaIndex: 0 }) {
       state.mediaIndex += 1;
       
       const att = imageAttachments[currentIndex] || attachments[currentIndex];
-      if (att && att.content) {
-        return `<a href="${att.content}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--ko-secondary-btn); border: 1px solid var(--ko-border); border-radius: 8px; color: var(--ko-orange); text-decoration: none; font-weight: 700; margin: 8px 0; font-size: 13px;">📸 Ver imagen (${escapeHtml(att.filename || 'Adjunto')})</a>`;
+      if (att) {
+        const url = att.id ? `/api/jira/attachment/${att.id}` : (att.content || '');
+        if (url) {
+          return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--ko-secondary-btn); border: 1px solid var(--ko-border); border-radius: 8px; color: var(--ko-orange); text-decoration: none; font-weight: 700; margin: 8px 0; font-size: 13px;">📸 Ver imagen (${escapeHtml(att.filename || 'Adjunto')})</a>`;
+        }
       }
       return `<span style="font-size: 11px; color: var(--ko-text-muted);">📸 [Imagen adjunta: ${escapeHtml(node.attrs.collection || 'Adjunto')}]</span>`;
     }

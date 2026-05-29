@@ -172,7 +172,7 @@ function isGreeting(text) {
 }
 
 function isHowAreYou(text) {
-  return matchesPatterns(text, ['como estas', 'como va', 'todo bien', 'que haces', 'que tal']);
+  return matchesPatterns(text, ['como estas', 'como va', 'todo bien', 'que haces', 'que tal', 'como andas']);
 }
 
 function isThanks(text) {
@@ -203,8 +203,9 @@ function detectPersonInQuery(normalizedText) {
 
 async function answerTasksByAssignee(userId, nameQuery) {
   try {
-    const alerts = await getJiraAlerts(userId);
-    const matched = alerts.filter(i => {
+    const jiraData = await getJiraAlerts(userId);
+    const issues = jiraData.dashboard?.allOpen || [];
+    const matched = issues.filter(i => {
       const assignee = normalize(i.assigneeName || '');
       return assignee.includes(nameQuery);
     });
@@ -230,8 +231,9 @@ async function answerTasksByAssignee(userId, nameQuery) {
 
 async function answerTasksByStatus(userId, statusNames) {
   try {
-    const alerts = await getJiraAlerts(userId);
-    const matched = alerts.filter(i => 
+    const jiraData = await getJiraAlerts(userId);
+    const issues = jiraData.dashboard?.allOpen || [];
+    const matched = issues.filter(i => 
       statusNames.some(sName => normalize(i.status).includes(normalize(sName)))
     );
 
@@ -256,8 +258,9 @@ async function answerTasksByStatus(userId, statusNames) {
 
 async function answerSpecificJiraTicket(userId, key) {
   try {
-    const alerts = await getJiraAlerts(userId);
-    const issue = alerts.find(i => i.key.toUpperCase() === key);
+    const jiraData = await getJiraAlerts(userId);
+    const issues = jiraData.dashboard?.allOpen || [];
+    const issue = issues.find(i => i.key.toUpperCase() === key);
     if (!issue) {
       return {
         answer: `No encontré el ticket ${key} en tu lista de tareas activas de Jira (recordá que filtramos tareas abiertas asignadas o informadas por vos).`,
@@ -285,8 +288,8 @@ async function answerSpecificJiraTicket(userId, key) {
 
 async function answerMyAssignments(userId) {
   try {
-    const alerts = await getJiraAlerts(userId);
-    const assigned = alerts.filter(i => i.isAssignee);
+    const jiraData = await getJiraAlerts(userId);
+    const assigned = jiraData.dashboard?.myAssignments || [];
     if (assigned.length === 0) {
       return {
         answer: 'No tenés tareas asignadas actualmente en tus tableros activos de Jira.',
@@ -307,8 +310,8 @@ async function answerMyAssignments(userId) {
 
 async function answerMyReportedIssues(userId) {
   try {
-    const alerts = await getJiraAlerts(userId);
-    const reported = alerts.filter(i => i.isReporter);
+    const jiraData = await getJiraAlerts(userId);
+    const reported = jiraData.dashboard?.reportedByMe || [];
     if (reported.length === 0) {
       return {
         answer: 'No encontré tareas creadas o informadas por vos en tus tableros activos.',
@@ -329,7 +332,8 @@ async function answerMyReportedIssues(userId) {
 
 async function answerAllAlerts(userId) {
   try {
-    const jiraCount = (await getJiraAlerts(userId).catch(() => [])).length;
+    const jiraData = await getJiraAlerts(userId).catch(() => ({ alerts: [] }));
+    const jiraCount = (jiraData.alerts || []).length;
     const trelloCount = (await getLiveAlerts(userId).catch(() => [])).length;
     const emailCount = await getUnreadEmailCount(userId, 'INBOX').catch(() => 0);
     return {
@@ -358,7 +362,8 @@ async function searchAppContent(userId, text) {
       };
     }
 
-    const jiraIssues = await getJiraAlerts(userId).catch(() => []);
+    const jiraData = await getJiraAlerts(userId).catch(() => ({ dashboard: {} }));
+    const jiraIssues = jiraData.dashboard?.allOpen || [];
     const matchingJira = jiraIssues.filter(i => 
       normalize(i.key).includes(query) || 
       normalize(i.summary).includes(query) || 
@@ -588,7 +593,8 @@ async function answerBoardsWithoutProject(userId) {
 
 async function answerJiraAlerts(userId) {
   try {
-    const alerts = await getJiraAlerts(userId);
+    const jiraData = await getJiraAlerts(userId);
+    const alerts = jiraData.alerts || [];
     return {
       answer: `Tenés ${alerts.length} alerta(s) de Jira.`,
       details: alerts.slice(0, 6).map(item => `${item.key}: ${item.summary}`)
